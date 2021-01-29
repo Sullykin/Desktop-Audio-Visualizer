@@ -1,23 +1,40 @@
-import pygame, os, sys, random, pyaudio, audioop, win32api, win32con, win32gui
-
-# Cinematic visualizer for dektop audio output
-# VAC required to loopback output streams
+import pyaudio
+import audioop
+import pygame
+import os
+import sys
+import random
+import win32api, win32con, win32gui
+from screeninfo import get_monitors
 
 # add different input options in config
 # add hotkey to put window on top
 # reduce lag
 
-# Version 1.2.1
-    # Added option to center the soundwaves instead of giving them random spawn positions
-    # Added spawn sensitivity option
-    # Reduced possible lag
+# Version 1.2.2
+    # program checks for the audio cable before starting
+    # took out audio cable from release // users must now download the cable themselves
+    # added support for different resolutions
+    # custom position
+    # put settings into variables
+    # make each soundwave one color through its lifetime
+# automatically switch devices
+# give option for framerate
+# fix fade out
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
-RECORD_SECONDS = 500000
 
+monitor = get_monitors()
+SCREEN_WIDTH = monitor[0].width
+SCREEN_HEIGHT = monitor[0].height
+white = (255,255,255)
+black = (0,0,0)
+RED = (255,0,0)
+
+# init pyaudio and find VAC
 p = pyaudio.PyAudio()
 info = p.get_host_api_info_by_index(0)
 numdevices = info.get('deviceCount')
@@ -26,13 +43,12 @@ for i in range(0, numdevices):
     if 'CABLE Output' in tempDevice:
         deviceIndex = i
         break
+    else: deviceIndex = None
+if deviceIndex == None:
+    print('Unable to locate virtual audio cable. Please make sure it is installed correctly then try again.')
+    sys.exit()
 
-SCREEN_WIDTH = 1920
-SCREEN_HEIGHT = 1080
-white = (255,255,255)
-black = (0,0,0)
-RED = (255,0,0)
-
+# fetch settings
 settings = []
 with open('Setup and Config- CLICK ME\\config.txt', 'r') as f:
     lines = f.readlines()
@@ -44,19 +60,27 @@ with open('Setup and Config- CLICK ME\\config.txt', 'r') as f:
             else:
                 settings.append(setting)
 settings[1] = settings[1].split(',')
-settings[1] = list(map(int,settings[1]))
+settings[6] = settings[6].split(',')
+settings[6] = tuple(map(int,settings[6]))
+randomRGB = settings[0]
+customRGB = tuple(map(int,settings[1]))
+sensitivity = int(settings[2])
+maxSW = int(settings[3])
+spawnSensitivity = int(settings[4])
+randomPosition = settings[5]
+customPositionX, customPositionY = settings[6]
 
 class Soundwave():
     def __init__(self, x, y, data):
         self.x = x
         self.y = y
-        self.maxdR = data//int(settings[2])
+        self.maxdR = data//sensitivity
         if self.maxdR > 300:
             self.maxdR = 300
         self.dR = 6
         self.done = False
-        self.age = 255
         self.radius = 6
+        self.color = abs(random.randint(0,255)), abs(random.randint(0,255)), abs(random.randint(0,255))
 
     def update(self):
         # movement
@@ -65,21 +89,19 @@ class Soundwave():
         # check radius
         if self.dR >= self.maxdR:
             self.done = True
-        # age color
-        self.age = 255-(255/((self.maxdR/self.dR)+1))
 
     def draw(self):
-        if self.radius >= int(settings[4]):
-            if settings[0] == 'enabled':
-                pygame.draw.circle(screen, (abs(random.randint(0,255)-self.age), abs(random.randint(0,255)-self.age), abs(random.randint(0,255)-self.age), 155), (self.x, self.y), self.radius, 2)
+        if self.radius >= spawnSensitivity:
+            if randomRGB == 'enabled':
+                pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius, 2)
             else:
-                pygame.draw.circle(screen, tuple(settings[1]), (self.x, self.y), self.radius, 2)
+                pygame.draw.circle(screen, customRGB, (self.x, self.y), self.radius, 2)
 
 pygame.init()
 os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0,0)
 screen = pygame.display.set_mode((1920, 1080), pygame.NOFRAME)
 pygame.display.set_caption('Desktop Audio Visualizer')
-fuchsia = (255, 0, 128)  # Transparency color
+fuchsia = (255, 0, 128) # Transparency color
 dark_red = (139, 0, 0)
 
 # Set window transparency color
@@ -90,7 +112,6 @@ win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE , lExStyle )
 win32gui.SetLayeredWindowAttributes(hwnd, win32api.RGB(*fuchsia), 0, win32con.LWA_COLORKEY)
 
 def play():
-    global settings
     data = 0
     soundwaves = []
     frames = []
@@ -114,29 +135,28 @@ def play():
             if soundwave.done:
                 soundwaves.remove(soundwave)
             # limit num of soundwaves to 100 by default
-            if len(soundwaves) >= int(settings[3]):
+            if len(soundwaves) >= maxSW:
                 soundwaves.remove(soundwaves[0])
         screen.fill(fuchsia)
-        try:
-            data = frames[0]
-            frames.remove(frames[0])
-            if settings[5] == 'enabled':
-                soundwaves.append(Soundwave(random.randint(0,1920), random.randint(0,1080), data))
-            else:
-                soundwaves.append(Soundwave(1920//2, 1080//2, data))
-        except:
-            pass
+        data = frames[0]
+        frames.remove(frames[0])
+        if randomPosition == 'enabled':
+            soundwaves.append(Soundwave(random.randint(0,1920), random.randint(0,1080), data))
+        elif settings[6] != (0,0):
+            soundwaves.append(Soundwave(customPositionX, customPositionY, data))
+        else:
+            soundwaves.append(Soundwave(1920//2, 1080//2, data))
         for soundwave in soundwaves:
             soundwave.draw()
         
         pygame.display.flip()
         clock.tick(60)
 #-------------------------------------------------------------------------------
-
-stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, output=True, frames_per_buffer=CHUNK, input_device_index=deviceIndex)
-
+stream = p.open(format=FORMAT, channels=CHANNELS,
+                rate=RATE, input=True, output=True,
+                frames_per_buffer=CHUNK,
+                input_device_index=deviceIndex)
 play()
-
 stream.stop_stream()
 stream.close()
 p.terminate()

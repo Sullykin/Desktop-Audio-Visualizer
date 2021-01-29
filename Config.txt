@@ -1,0 +1,25 @@
+# Note: Lines with '#' in front of them are ignored by the parser.
+
+
+# Soundwave random RGB
+enabled
+
+# Soundwave custom RGB; Random RGB must be disabled for this to work; Black by default
+# Formatted as red,green,blue,opacity
+# Example for opaque green: 0,255,0,255
+0,0,0,255
+
+# Soundwave sensitivity; This affects how large the soundwaves can get; **Larger numbers = less sensitive!
+200
+
+# Max number of soundwaves that can appear at once; It is strongly recommended to keep this number at default or lower to avoid lag
+100
+
+# Minimum volume value to spawn a soundwave (Spawn sensitivity)
+30
+
+# Random spawn position
+disabled
+
+# Custom spawn position; Cannot be 0,0 (topleft); Random spawn position must be disabled for this to work
+0,0
