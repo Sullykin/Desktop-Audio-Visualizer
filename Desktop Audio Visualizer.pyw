@@ -6,18 +6,25 @@ import sys
 import random
 import win32api, win32con, win32gui
 from screeninfo import get_monitors
+from ctypes import windll
+from time import sleep
+
+# The waveform level is loosely related the the beat of the music
+# because loudness values are typically higher during a beat.
 
 # add different input options in config
 # add hotkey to put window on top
 # reduce lag
 
-# Version 1.2.2
+# Version 1.3.0
     # program checks for the audio cable before starting
     # took out audio cable from release // users must now download the cable themselves
     # added support for different resolutions
     # custom position
     # put settings into variables
     # make each soundwave one color through its lifetime
+    # add option for always on top
+    # error dialog boxes
 # automatically switch devices
 # give option for framerate
 # fix fade out
@@ -45,30 +52,35 @@ for i in range(0, numdevices):
         break
     else: deviceIndex = None
 if deviceIndex == None:
-    print('Unable to locate virtual audio cable. Please make sure it is installed correctly then try again.')
+    windll.user32.MessageBoxW(0, u"Unable to locate virtual audio cable. Please make sure it is installed correctly then try again.", u"Error", 0)
     sys.exit()
 
 # fetch settings
-settings = []
-with open('Setup and Config- CLICK ME\\config.txt', 'r') as f:
-    lines = f.readlines()
-    for setting in lines:
-        setting = setting.strip()
-        if setting != '':
-            if setting[0] == '#':
-                continue
-            else:
-                settings.append(setting)
-settings[1] = settings[1].split(',')
-settings[6] = settings[6].split(',')
-settings[6] = tuple(map(int,settings[6]))
-randomRGB = settings[0]
-customRGB = tuple(map(int,settings[1]))
-sensitivity = int(settings[2])
-maxSW = int(settings[3])
-spawnSensitivity = int(settings[4])
-randomPosition = settings[5]
-customPositionX, customPositionY = settings[6]
+try:
+    settings = []
+    with open('Config.txt', 'r') as f:
+        lines = f.readlines()
+        for setting in lines:
+            setting = setting.strip()
+            if setting != '':
+                if setting[0] == '#':
+                    continue
+                else:
+                    settings.append(setting)
+    settings[1] = settings[1].split(',')
+    settings[3] = settings[3].split(',')
+    customPosition = tuple(map(int,settings[3]))
+    randomRGB = settings[0]
+    customRGB = tuple(map(int,settings[1]))
+    sensitivity = int(settings[4])
+    maxSW = int(settings[6])
+    spawnSensitivity = int(settings[5])
+    randomPosition = settings[2]
+    customPositionX, customPositionY = customPosition
+    alwaysOnTop = settings[7]
+except:
+    windll.user32.MessageBoxW(0, u"Unable to load settings. Config.txt may be formatted incorrectly or is missing.", u"Error", 0)
+    sys.exit()
 
 class Soundwave():
     def __init__(self, x, y, data):
@@ -97,13 +109,14 @@ class Soundwave():
             else:
                 pygame.draw.circle(screen, customRGB, (self.x, self.y), self.radius, 2)
 
+SetWindowPos = windll.user32.SetWindowPos
 pygame.init()
 os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0,0)
 screen = pygame.display.set_mode((1920, 1080), pygame.NOFRAME)
+if alwaysOnTop == 'enabled': SetWindowPos(pygame.display.get_wm_info()['window'], -1, 0, 0, 0, 0, 0x0001)
 pygame.display.set_caption('Desktop Audio Visualizer')
 fuchsia = (255, 0, 128) # Transparency color
 dark_red = (139, 0, 0)
-
 # Set window transparency color
 hwnd = win32gui.FindWindow(None, "Desktop Audio Visualizer") # Getting window handle
 lExStyle = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
@@ -121,9 +134,8 @@ def play():
     clock = pygame.time.Clock()
     done = False
     while not done:
-        garbo = stream.read(CHUNK)
-        rms = audioop.rms(garbo, 2) # get volume of each frame
-        frames.append(rms)
+        frame = stream.read(CHUNK)
+        volume = audioop.rms(frame, 2) # get volume of each frame
         # process user input
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -138,14 +150,12 @@ def play():
             if len(soundwaves) >= maxSW:
                 soundwaves.remove(soundwaves[0])
         screen.fill(fuchsia)
-        data = frames[0]
-        frames.remove(frames[0])
         if randomPosition == 'enabled':
-            soundwaves.append(Soundwave(random.randint(0,1920), random.randint(0,1080), data))
-        elif settings[6] != (0,0):
-            soundwaves.append(Soundwave(customPositionX, customPositionY, data))
+            soundwaves.append(Soundwave(random.randint(0,1920), random.randint(0,1080), volume))
+        elif customPosition != (0,0):
+            soundwaves.append(Soundwave(customPositionX, customPositionY, volume))
         else:
-            soundwaves.append(Soundwave(1920//2, 1080//2, data))
+            soundwaves.append(Soundwave(1920//2, 1080//2, volume))
         for soundwave in soundwaves:
             soundwave.draw()
         
