@@ -6,30 +6,30 @@ enabled
 
 
 # Soundwave custom RGB; Random RGB must be disabled for this to work; Black by default
-# Formatted as red,green,blue,opacity
-# Example for opaque green: 0,255,0,255
-0,0,0,255
+# Formatted as red,green,blue
+# Example for green: 0,255,0
+0,0,0
 
 
 # Random spawn position
 disabled
 
 
-# Custom spawn position; Cannot be 0,0 (topleft); Random spawn position must be disabled for this to work
+# Custom spawn position; If 0,0 it will default to the center of the screen; Random spawn position must be disabled for this to work
 0,0
 
 
-# Soundwave sensitivity; This affects how large the soundwaves can get; **Larger numbers = less sensitive!
-200
+# Soundwave sensitivity; This affects how large the soundwaves are
+10
 
 
-# Minimum volume value to spawn a soundwave (Spawn sensitivity)
-30
+# Minimum volume value to spawn a soundwave (Spawn sensitivity); A high number (~20) is good for only showing beats
+5
 
 
 # Max number of soundwaves that can appear at once; It is strongly recommended to keep this number at default or lower to avoid lag
 100
 
 
-# Visualizer window always on top
+# Visualizer window always on top; must restart program for it to take effect
 disabled
