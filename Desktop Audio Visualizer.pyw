@@ -29,6 +29,7 @@ from time import sleep
 # reduce lag
 # blur and shake screen on beats
 # default center in settings instead of 0,0
+# multi-monitor support
 
 CHUNK = 1024
 FORMAT = pyaudio.paFloat32
@@ -184,11 +185,13 @@ def play():
             
         pygame.display.flip()
         clock.tick(60)
-#-------------------------------------------------------------------------------
+
+
 stream = p.open(format=FORMAT, channels=CHANNELS,
                 rate=RATE, input=True, output=True,
                 frames_per_buffer=CHUNK,
                 input_device_index=deviceIndex)
+
 play()
 stream.stop_stream()
 stream.close()
