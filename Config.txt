@@ -24,11 +24,7 @@ disabled
 
 
 # Minimum volume value to spawn a soundwave (Spawn sensitivity); A high number (~20) is good for only showing beats
-5
-
-
-# Max number of soundwaves that can appear at once; It is strongly recommended to keep this number at default or lower to avoid lag
-100
+1
 
 
 # Visualizer window always on top; must restart program for it to take effect

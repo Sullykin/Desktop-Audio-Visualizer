@@ -9,17 +9,12 @@ import os
 import sys
 import random
 from time import sleep
+from scipy import signal
+import struct
 
 # Version 1.4.0
-    # Fixed resolutions not matching
-    # Automatically detect new settings while program is running
-    # Improved overall visual representation by changing lots of numbers...
-        # Beats, vocals, and instrumentals are more easily distinguishable
-        # Now that the sensitivity settings make sense, users can customize to their preferences with more intuition than experimentation
-    # Config options have changed accordingly
-        # Soundwave sensitivity setting no longer inverted
-        # Spawn sensitivity is now the value at which a soundwave can SPAWN, as opposed to the value at which a soundwave can be rendered to the screen
-
+    # removed max sw option
+    
 # give option for framerate
 # drag function or click to pickup/release
 # merge enable and custom settings?
@@ -30,6 +25,14 @@ from time import sleep
 # blur and shake screen on beats
 # default center in settings instead of 0,0
 # multi-monitor support
+# separate left/right stereo channels
+# option for circle thickness
+# side quest: make a frequency heat map of a song
+
+
+# for other branch:
+    # auto select contrasting color based on bg (use chart)
+    # beat blur/shake
 
 CHUNK = 1024
 FORMAT = pyaudio.paFloat32
@@ -64,6 +67,68 @@ pDetection.set_unit("Hz")
 pDetection.set_silence(-40)
 
 
+#p = c + r*a + d*I*a
+# Px, Py = tangent intersection
+# Cx, Cy = circle center
+# a = circle raidus
+
+# start at center of circle, draw line to outside point using freq
+
+class Spike_cirlce():
+    def __init__(self, volume, freq):
+        self.maxHeight = volume*10
+        self.x = freq+400
+        self.y = SCREEN_HEIGHT
+        self.w = 2
+        self.h = 0
+        if settings['randomRGB'] == 'enabled':
+            self.color = (random.randint(0,255),
+                          random.randint(0,255),
+                          random.randint(0,255))
+        else:
+            self.color = settings['customRGB']
+        self.done = False
+
+    def update(self):
+        # movement
+        self.h += 15
+        # check radius
+        if self.h <= self.maxHeight:
+            self.done = True
+
+    def draw(self):
+        pygame.draw.polygon(screen, self.color, [(self.x-10,self.y), (self.x,SCREEN_HEIGHT-self.h), (self.x+10,self.y)])
+        #pygame.draw.rect(screen, self.color, (self.x, SCREEN_HEIGHT-self.h, self.w, self.h))
+
+
+
+class Spike():
+    def __init__(self, volume, freq):
+        self.maxHeight = volume*10
+        self.x = transform(freq)
+        self.y = SCREEN_HEIGHT
+        self.w = 20
+        self.h = 0
+        if settings['randomRGB'] == 'enabled':
+            self.color = (random.randint(0,255),
+                          random.randint(0,255),
+                          random.randint(0,255))
+        else:
+            self.color = settings['customRGB']
+        self.done = False
+
+    def update(self):
+        # movement
+        self.h += 20
+        # check radius
+        if self.h >= self.maxHeight:
+            self.done = True
+
+    def draw(self):
+        #pygame.draw.polygon(screen, self.color, [(self.x-10,self.y), (self.x,SCREEN_HEIGHT-self.h), (self.x+10,self.y)])
+        pygame.draw.rect(screen, self.color, (self.x, SCREEN_HEIGHT-self.h, self.w, self.h))
+
+
 class Soundwave():
     def __init__(self, x, y, data):
         self.x = x
@@ -71,9 +136,12 @@ class Soundwave():
         self.maxRadius = data*settings['sensitivity']
         self.radius = 0
         self.done = False
-        self.color = (random.randint(0,255),
-                      random.randint(0,255),
-                      random.randint(0,255))
+        if settings['randomRGB'] == 'enabled':
+            self.color = (random.randint(0,255),
+                          random.randint(0,255),
+                          random.randint(0,255))
+        else:
+            self.color = settings['customRGB']
         
     def update(self):
         # movement
@@ -83,11 +151,7 @@ class Soundwave():
             self.done = True
 
     def draw(self):
-        if settings['randomRGB'] == 'enabled':
-            pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius, 2)
-        else:
-            pygame.draw.circle(screen, settings['customRGB'], (self.x, self.y), self.radius, 2)
-
+        pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius, 2)
 
 def updateConfig():
     global settings
@@ -111,13 +175,15 @@ def updateConfig():
 
         settings['sensitivity']      = int(temp[4])
         settings['spawnSensitivity'] = int(temp[5])
-        settings['maxSW']            = int(temp[6])
-        settings['alwaysOnTop']      = temp[7]
+        settings['alwaysOnTop']      = temp[6]
         return settings
     except:
         windll.user32.MessageBoxW(0, u"Unable to load settings. Config.txt may be formatted incorrectly or is missing.", u"Error", 0)
         sys.exit()
 
+def transform(x):
+    # put c4 freq at center
+    return (x - 0)*(SCREEN_WIDTH/1000)+400 # linear
 
 # fetch initial settings
 settings = updateConfig()
@@ -142,6 +208,7 @@ def play():
     global settings
     framecount = 0
     soundwaves = []
+    spikes = []
     clock = pygame.time.Clock()
     done = False
     while not done:
@@ -153,11 +220,22 @@ def play():
         # Calculate pitch and volume for this frame
         frame = stream.read(CHUNK)
         samples = np.frombuffer(frame, dtype=aubio.float_type)
-        #pitch = int(pDetection(samples)[0])
+        pitch = int(pDetection(samples)[0])
         volume = int(np.average(np.abs(samples))*100)
-        
+        '''
+        fourier_transform = np.fft.rfft(samples)
+        abs_fourier_transform = np.abs(fourier_transform)
+        power_spectrum = np.square(abs_fourier_transform)
+        frequency = np.linspace(0, RATE/2, len(power_spectrum))
+        for freq in abs_fourier_transform:
+            # combine frequencies into sections
+            if freq < 100: section0_99.append(freq)
+            elif freq < 200: section100_199.append(freq)
+        for freq in section0_99:
+        '''
+        # ^ if freq in section: add amplitude to base_freq and remove freq
+            
         # process user input
-        pos = pygame.mouse.get_pos()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 done = True
@@ -167,11 +245,14 @@ def play():
             soundwave.update()
             if soundwave.done:
                 soundwaves.remove(soundwave)
-            # limit num of soundwaves to 100 by default // FIFO
-            if len(soundwaves) >= settings['maxSW']:
-                soundwaves.remove(soundwaves[0])
-                
+
+        for spike in spikes:
+            spike.update()
+            if spike.done:
+                spikes.remove(spike)
+
         screen.fill(fuchsia)
+        pygame.draw.rect(screen, (255,0,0), (0,1075,SCREEN_WIDTH,10))
         # draw soundwaves according to settings
         if volume >= settings['spawnSensitivity']:
             if settings['randomPosition'] == 'enabled':
@@ -182,7 +263,13 @@ def play():
                 soundwaves.append(Soundwave(SCREEN_WIDTH//2, SCREEN_HEIGHT//2, volume))
         for soundwave in soundwaves:
             soundwave.draw()
-            
+        if volume >= settings['spawnSensitivity']:
+            #for pitch in abs_fourier_transform:
+            #    spikes.append(Spike(volume, pitch))
+            spikes.append(Spike(volume, pitch))
+        for spike in spikes:
+            spike.draw()
+
         pygame.display.flip()
         clock.tick(60)
 
