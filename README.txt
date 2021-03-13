@@ -1,3 +1,6 @@
+Setup Instructions
+-------------------
+
 1. Go to https://vb-audio.com/Cable/ and install the virtual audio cable.
 
 2. Go to your sound settings and open the Sound Control Panel.

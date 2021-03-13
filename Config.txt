@@ -1,31 +1,42 @@
 # Note: Lines with '#' in front of them are ignored by the parser.
 
+# General Settings
+# --------------------------------------------------------------------------------------------------------------------------------
 
-# Soundwave random RGB
+# Soundwaves
 enabled
 
+# Spikes
+enabled
 
-# Soundwave custom RGB; Random RGB must be disabled for this to work; Black by default
-# Formatted as red,green,blue
-# Example for green: 0,255,0
-0,0,0
-
-
-# Random spawn position
+# Visualizer window always on top; You must restart the program for this to take effect
 disabled
 
 
-# Custom spawn position; If 0,0 it will default to the center of the screen; Random spawn position must be disabled for this to work
-0,0
+# Circle Settings
+# --------------------------------------------------------------------------------------------------------------------------------
 
+# Color scheme (Options: RGB, "random", "fade") | RGB example for green: 0,255,0
+fade
+
+# Spawn positions (Options: Coordinates, "random", "center") | Coordinates example for top-left corner: 0,0
+center
 
 # Soundwave sensitivity; This affects how large the soundwaves are
 10
-
 
 # Minimum volume value to spawn a soundwave (Spawn sensitivity); A high number (~20) is good for only showing beats
 1
 
 
-# Visualizer window always on top; must restart program for it to take effect
-disabled
+# Spike Settings
+# --------------------------------------------------------------------------------------------------------------------------------
+
+# Color scheme (Options: RGB, "random", "fade")
+fade
+
+# Spike sensitivity; This affects how high the spikes go
+10
+
+# Minimum volume value to spawn a spike (Spawn sensitivity); A high number (~20) is good for only showing beats
+1
