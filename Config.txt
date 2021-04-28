@@ -9,8 +9,8 @@ enabled
 # Spikes
 enabled
 
-# Visualizer window always on top; You must restart the program for this to take effect
-disabled
+# Visualizer window always on top; You must restart the program for this change to take effect
+enabled
 
 
 # Circle Settings
@@ -35,7 +35,7 @@ center
 # Color scheme (Options: RGB, "random", "fade")
 fade
 
-# Spike sensitivity; This affects how high the spikes go
+# Spike sensitivity; This affects how tall the spikes are
 10
 
 # Minimum volume value to spawn a spike (Spawn sensitivity); A high number (~20) is good for only showing beats

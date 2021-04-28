@@ -44,7 +44,7 @@ class Visualizer:
                                       u"Error", 0)
 
         # Init aubio pitch detection object
-        self.pDetection = aubio.pitch("default", 2048, 2048//2, 44100)
+        self.pDetection = aubio.pitch("default", 2048, self.CHUNK, self.RATE)
         self.pDetection.set_unit("Hz")
         self.pDetection.set_silence(-40)
 
@@ -94,7 +94,7 @@ class Visualizer:
         self.clock = pygame.time.Clock()
         self.done = False
         while not self.done:
-            # Every 5 seconds, update settings and color
+            # Every 3 seconds update settings
             self.framecount += 1
             if self.framecount % (60*3) == 0:
                 settings = update_config()
@@ -203,7 +203,7 @@ class Spike:
     def __init__(self, volume, freq, color):
         self.volume = volume
         self.maxHeight = volume*settings['spikeSensitivity']
-        self.x = transform(freq)
+        self.x = transform_range_to_screen_width(freq)
         self.y = SCREEN_HEIGHT-4
         self.w = 20
         self.h = 0
@@ -320,11 +320,10 @@ def update_config():
         sys.exit()
 
 
-def transform(pitch):
-    # Put c4 freq at ~center using linear range conversion
-    OldRange = (1000 - 0)
-    NewRange = (SCREEN_WIDTH - 0)
-    return (((pitch - 0) * NewRange) / OldRange) + 400
+def transform_range_to_screen_width(pitch):
+    # Put c4 freq at ~center (frequency values up to 1000)
+    # using linear range conversion
+    return ((pitch * SCREEN_WIDTH) / 1000) + 400
 
 
 if __name__ == "__main__":
