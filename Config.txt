@@ -1,42 +1,11 @@
-# Note: Lines with '#' in front of them are ignored by the parser.
+# Settings
+# Note: Lines with '#' in front of them are ignored by the program.
 
-# General Settings
-# --------------------------------------------------------------------------------------------------------------------------------
+# Active visualizers (soundwaves, spikes, blackhole)
+spikes
 
-# Soundwaves
-enabled
-
-# Spikes
-enabled
-
-# Visualizer window always on top; You must restart the program for this change to take effect
-enabled
-
-
-# Circle Settings
-# --------------------------------------------------------------------------------------------------------------------------------
-
-# Color scheme (Options: RGB, "random", "fade") | RGB example for green: 0,255,0
+# Color scheme (Options: RGB, "random", "fade") | RGB example for green: "0,255,0"
 fade
 
-# Spawn positions (Options: Coordinates, "random", "center") | Coordinates example for top-left corner: 0,0
-center
-
-# Soundwave sensitivity; This affects how large the soundwaves are
-10
-
-# Minimum volume value to spawn a soundwave (Spawn sensitivity); A high number (~20) is good for only showing beats
-1
-
-
-# Spike Settings
-# --------------------------------------------------------------------------------------------------------------------------------
-
-# Color scheme (Options: RGB, "random", "fade")
-fade
-
-# Spike sensitivity; This affects how tall the spikes are
-10
-
-# Minimum volume value to spawn a spike (Spawn sensitivity); A high number (~20) is good for only showing beats
-1
+# Volume sensitivity
+50

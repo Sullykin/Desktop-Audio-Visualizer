@@ -1,79 +1,80 @@
 import pygame
-import pyaudio
-import aubio
+import pyaudiowpatch as pyaudio  # patched pyaudio for loopback capability
+import aubio  # audio feature extraction
 import numpy as np
-import win32api
-import win32con
-import win32gui
+import win32api, win32con, win32gui
 from screeninfo import get_monitors
 from ctypes import windll
-import os
-import sys
-from random import randint
+import os, sys
 from winreg import *
+from hashlib import md5
 
+# Algos
+import visualizers.spikes as spikes
+import visualizers.blackhole as blackhole
+import visualizers.soundwaves as soundwaves
+import visualizers.perlinfield as perlinfield
 
-monitor = get_monitors()
-SCREEN_WIDTH = monitor[0].width
-SCREEN_HEIGHT = monitor[0].height
+# CORE CHANGES
+# Uses patched pyaudio for loopback capability
+# Applies peak normalization to audio, scaling all amplitudes to effective volumes
 
+# The generative visualizer uses multiple algorithms to generate pleasing
+# visuals using multiple audio signal features mixed with random noise as input
+
+# Each algorithm has its own file and class so the visualizer can create the
+# object, update it, and draw it along with other objects in a list each frame
 
 class Visualizer:
+    """ This object processes the audio signal and passes the values to all enabled visualizers """
     def __init__(self):
+        self.setup_display()
+        self.setup_audio()
+        self.color = (0,0,0)
+        self.colorfade = ColorFade()
+
+    def setup_audio(self):
+        # init pyaudio vars
         self.CHUNK = 1024
         self.FORMAT = pyaudio.paFloat32
         self.CHANNELS = 1
-        self.RATE = 44100
-
-        # Init pyaudio and find VAC
-        self.p = pyaudio.PyAudio()
-        info = self.p.get_host_api_info_by_index(0)
-        numdevices = info.get('deviceCount')
-        self.deviceIndex = None
-        for i in range(numdevices):
-            tempDevice = self.p.get_device_info_by_host_api_device_index(
-                0, i
-                ).get('name')
-            if 'CABLE Output' in tempDevice:
-                self.deviceIndex = i
-                break
-        if self.deviceIndex is None:
-            windll.user32.MessageBoxW(0, u'Unable to locate audio device'
-                                      ' "CABLE Output". Please make sure it is'
-                                      ' installed correctly then try again.',
-                                      u"Error", 0)
+        self.RATE = 48000
 
         # Init aubio pitch detection object
         self.pDetection = aubio.pitch("default", 2048, self.CHUNK, self.RATE)
         self.pDetection.set_unit("Hz")
         self.pDetection.set_silence(-40)
 
-        # Init color fade vars
-        self.steps = 200
-        self.color = (255, 0, 0)
-        self.colorFrom = [255, 0, 0]
-        self.colorTo = [0, 255, 0]
-        self.step_R = (self.colorTo[0] - self.colorFrom[0]) / self.steps
-        self.step_G = (self.colorTo[1] - self.colorFrom[1]) / self.steps
-        self.step_B = (self.colorTo[2] - self.colorFrom[2]) / self.steps
-        self.r = int(self.colorFrom[0])
-        self.g = int(self.colorFrom[1])
-        self.b = int(self.colorFrom[2])
+        # Set up the beat detection algorithm
+        win_s = 2048  # Window size
+        hop_s = win_s // 2  # Hop size
+        samplerate = self.RATE  # Sampling rate
+        self.tempo = aubio.tempo("default", win_s, hop_s, samplerate)
+        self.max_amplitude = 0
+
+    def setup_display(self):
+        monitor = get_monitors()[0]
+        self.SCREEN_WIDTH = monitor.width
+        self.SCREEN_HEIGHT = monitor.height
 
         # Fetch initial settings
-        settings = update_config()
+        self.settings_checksum = ""
+        self.update_config()
 
         # Init pygame and display
         SetWindowPos = windll.user32.SetWindowPos
         pygame.init()
         os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0, 0)
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT),
+        self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT),
                                               pygame.NOFRAME)
-        if settings['alwaysOnTop'] == 'enabled':
+        if True:#self.settings['alwaysOnTop'] == 'enabled':
             SetWindowPos(
                 pygame.display.get_wm_info()['window'], -1, 0, 0, 0, 0, 0x0001
                 )
         pygame.display.set_caption('Desktop Audio Visualizer')
+        self.clock = pygame.time.Clock()
+        self.framecount = 0
+
         # Set window transparency color
         self.fuchsia = (255, 0, 128)  # Transparency color
         hwnd = win32gui.FindWindow(None, "Desktop Audio Visualizer")
@@ -84,20 +85,43 @@ class Visualizer:
                                             win32api.RGB(*self.fuchsia), 0,
                                             win32con.LWA_COLORKEY)
 
-        self.start()
+    def start(self):
+        with pyaudio.PyAudio() as p:
+            # Get default WASAPI speakers
+            wasapi_info = p.get_host_api_info_by_type(pyaudio.paWASAPI)
+            default_speakers = p.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
+            
+            if not default_speakers["isLoopbackDevice"]:
+                for loopback in p.get_loopback_device_info_generator():
+                    if default_speakers["name"] in loopback["name"]:
+                        default_speakers = loopback
+                        self.rate=int(default_speakers["defaultSampleRate"])
+                        break
+            self.default_device = default_speakers
+            with p.open(format=self.FORMAT, channels=self.CHANNELS,
+                        rate=self.RATE, input=True,
+                        frames_per_buffer=self.CHUNK,
+                        input_device_index=self.default_device["index"]
+            ) as stream:
+                self.stream = stream
+                self.main()
 
     def main(self):
-        global settings
-        self.framecount = 0
-        self.spikes = []
-        self.soundwaves = []
-        self.clock = pygame.time.Clock()
+        valid_algos = {
+            "spikes": spikes.Spikes(self),
+            "blackhole": blackhole.BlackHole(self),
+            "soundwaves": soundwaves.Soundwaves(self),
+            "perlinfield": perlinfield.PerlinField(self)
+        }
+        self.active_algos = []
+        for algo in self.settings["active_algos"]:
+            if algo in valid_algos and valid_algos[algo] not in self.active_algos:
+                self.active_algos.append(valid_algos[algo])
         self.done = False
         while not self.done:
-            # Every 3 seconds update settings
-            self.framecount += 1
-            if self.framecount % (60*3) == 0:
-                settings = update_config()
+            # Update settings every second
+            if self.framecount % 60 == 0:
+                self.update_config()
 
             # Process user input
             for event in pygame.event.get():
@@ -108,222 +132,107 @@ class Visualizer:
             frame = self.stream.read(self.CHUNK)
             samples = np.frombuffer(frame, dtype=aubio.float_type)
             pitch = int(self.pDetection(samples)[0])
-            volume = int(np.average(np.abs(samples))*100)
+            abs_values = np.abs(samples)*100
+            current_max_amp = int(np.max(abs_values))
+            volume = int(self.normalize_volume(current_max_amp, abs_values))
+            is_beat = self.tempo(samples)
 
-            # Assign color to spikes according to pitch/volume
-            if volume > 5:
-                self.outline = volume // 5
-            else:
-                self.outline = 1
-
-            self.color = list(self.color)
-            if self.color[0] > 250:
-                self.calc_steps([0, 255, 0])
-            elif self.color[1] > 250:
-                self.calc_steps([0, 0, 255])
-            elif self.color[2] > 250:
-                self.calc_steps([255, 0, 0])
-
-            self.color = (int(self.r), int(self.g), int(self.b))
-            self.r += self.step_R
-            self.g += self.step_G
-            self.b += self.step_B
-
-            for spike in self.spikes:
-                spike.update()
-                if spike.done:
-                    self.spikes.remove(spike)
-
-            for soundwave in self.soundwaves:
-                soundwave.update()
-                if soundwave.done:
-                    self.soundwaves.remove(soundwave)
-
+            # update and draw visuals
             self.screen.fill(self.fuchsia)
-
-            # Spikes
-            if settings['spikes'] == 'enabled':
-                if settings['spikeColor'] == 'random':
-                    spikeColor = (randint(0,255),
-                                  randint(0,255),
-                                  randint(0,255))
-                elif settings['spikeColor'] == 'fade':
-                    spikeColor = self.color
-                else:
-                    spikeColor = tuple(map(int,settings['spikeColor'].split(',')))
-                    
-                pygame.draw.rect(self.screen, (0), (0, 1, SCREEN_WIDTH, 5))  # Top
-                pygame.draw.rect(self.screen, (0), (0, SCREEN_HEIGHT-6, SCREEN_WIDTH, 5))  # Bottom
-                if volume >= settings['spikeSpawnSensitivity']:
-                    self.spikes.append(Spike(volume, pitch, spikeColor))
-                for spike in self.spikes:
-                    spike.draw(self.screen)
-                if settings['spikeColor'] == 'random':
-                    spikeColor = (255,255,255)
-                pygame.draw.rect(self.screen, spikeColor, (0, -2, SCREEN_WIDTH, 5))  # Top
-                pygame.draw.rect(self.screen, spikeColor, (0, SCREEN_HEIGHT-3, SCREEN_WIDTH, 5))  # Bottom
-
-            # Soundwaves
-            if settings['soundwaves'] == 'enabled':
-                if volume >= settings['circleSpawnSensitivity']:
-                    if settings['circlePosition'] == 'random':
-                        self.soundwaves.append(Soundwave(randint(0,SCREEN_WIDTH), randint(0,SCREEN_HEIGHT), volume, self.color))
-                    elif settings['circlePosition'] == 'center':
-                        self.soundwaves.append(Soundwave(SCREEN_WIDTH//2, SCREEN_HEIGHT//2, volume, self.color))
-                    else:
-                        position = list(map(int,settings['circlePosition'].split(','))) # put coords into tuple
-                        self.soundwaves.append(Soundwave(position[0], position[1], volume, self.color))
-                for soundwave in self.soundwaves:
-                    soundwave.draw(self.screen)
+            self.color = self.colorfade.next()
+            for obj in self.active_algos:
+                obj.update(pitch, volume, is_beat)
+                obj.draw()
 
             pygame.display.flip()
             self.clock.tick(60)
+            self.framecount += 1
+
+    def update_config(self):
+        with open('Config.txt', 'r') as f:
+            new_checksum = md5(f.read().encode()).hexdigest()
+            if self.settings_checksum:
+                if new_checksum == self.settings_checksum:
+                    return
+            self.settings_checksum = new_checksum
+        try:
+            temp = {}
+            settings = {}
+            with open('Config.txt', 'r') as f:
+                i = 0
+                for setting in f.readlines():
+                    setting = setting.strip()
+                    if setting != '' and setting[0] != '#':
+                        temp[i] = setting.lower()
+                        i += 1
+            # General settings
+            settings['active_algos'] = temp[0].split(', ')
+            settings['color_scheme'] = temp[1]
+            settings['volume_sensitivity'] = int(temp[2])
+            self.settings = settings
+        except Exception:
+            windll.user32.MessageBoxW(0, u"Unable to load settings."
+                                    " Config.txt may be formatted incorrectly"
+                                    " or is missing.", u"Error", 0)
+            sys.exit()
+
+    def normalize_volume(self, current_max_amp, audio_array):
+        if current_max_amp > self.max_amplitude:
+            self.max_amplitude = current_max_amp
+        # Reset the maximum amplitude to zero if the current maximum is zero
+        elif current_max_amp == 0:
+            self.max_amplitude = 0
+        # Calculate the scaling factor to normalize the audio data
+        scaling_factor = 1.0
+        if self.max_amplitude != 0:
+            scaling_factor /= self.max_amplitude
+        return np.average(audio_array) * scaling_factor * self.settings["volume_sensitivity"]  # default 50
+
+class ColorFade:
+    def __init__(self):
+        # Init color fade vars
+        self.steps = 200
+        self.color = (255, 0, 0)
+        self.colorFrom = [255, 0, 0]
+        self.colorTo = [0, 255, 0]
+        self.inv_steps = 1.0 / self.steps
+        self.step_R = (self.colorTo[0] - self.colorFrom[0]) * self.inv_steps
+        self.step_G = (self.colorTo[1] - self.colorFrom[1]) * self.inv_steps
+        self.step_B = (self.colorTo[2] - self.colorFrom[2]) * self.inv_steps
+        self.r = self.colorFrom[0]
+        self.g = self.colorFrom[1]
+        self.b = self.colorFrom[2]
+        self.transition_needed = False
 
     def calc_steps(self, colorTo):
         self.colorFrom = self.color
         self.colorTo = colorTo
-        self.step_R = (self.colorTo[0] - self.colorFrom[0]) / self.steps
-        self.step_G = (self.colorTo[1] - self.colorFrom[1]) / self.steps
-        self.step_B = (self.colorTo[2] - self.colorFrom[2]) / self.steps
+        self.step_R = (self.colorTo[0] - self.colorFrom[0]) * self.inv_steps
+        self.step_G = (self.colorTo[1] - self.colorFrom[1]) * self.inv_steps
+        self.step_B = (self.colorTo[2] - self.colorFrom[2]) * self.inv_steps
 
-    def start(self):
-        self.stream = self.p.open(format=self.FORMAT, channels=self.CHANNELS,
-                                  rate=self.RATE, input=True, output=True,
-                                  frames_per_buffer=self.CHUNK,
-                                  input_device_index=self.deviceIndex)
-        self.main()
+    def next(self):
+        if self.transition_needed:
+            if self.color[0] >= 255:
+                new_target = [0, 255, 0]
+            elif self.color[1] >= 255:
+                new_target = [0, 0, 255]
+            else:
+                new_target = [255, 0, 0]
+            self.calc_steps(new_target)
+            self.transition_needed = False
 
-    def stop(self):
-        self.stream.stop_stream()
-        self.stream.close()
-        self.p.terminate()
+        self.r += self.step_R
+        self.g += self.step_G
+        self.b += self.step_B
+        self.color = (int(self.r), int(self.g), int(self.b))
 
-
-class Spike:
-    def __init__(self, volume, freq, color):
-        self.volume = volume
-        self.maxHeight = volume*settings['spikeSensitivity']
-        self.x = transform_range_to_screen_width(freq)
-        self.y = SCREEN_HEIGHT-4
-        self.w = 20
-        self.h = 0
-        self.done = False
-        self.rise = True
-        self.speed = (self.maxHeight//5)
-        self.color = color
-
-    def update(self):
-        # Movement
-        if self.rise:
-            self.h += self.speed
-            if self.h >= self.maxHeight:
-                self.rise = False
-        else:
-            self.h -= self.speed
-            if self.h <= 0:
-                self.done = True
-
-    def draw(self, screen):
-        # Black outlines
-        pygame.draw.polygon(screen, (0), [(SCREEN_WIDTH-(self.x-10-4), 2),  # Top
-                                          (SCREEN_WIDTH-self.x, self.h+4),
-                                          (SCREEN_WIDTH-(self.x+10+4), 2)])
-
-        pygame.draw.polygon(screen, (0), [(self.x-10-4, self.y),  # Bottom
-                                          (self.x, SCREEN_HEIGHT-self.h-4),
-                                          (self.x+10+4, self.y)])
-        # Beat outlines
-        '''
-        if self.rise and self.volume > 20:
-            ocolor = list(self.color)
-            ocolor[0] = 255-ocolor[0]
-            ocolor[1] = 255-ocolor[1]
-            ocolor[2] = 255-ocolor[2]
-            ocolor = tuple(ocolor)
-            pygame.draw.polygon(screen, ocolor,  # Top
-                                [(SCREEN_WIDTH-(self.x-10-outline), 2),
-                                 (SCREEN_WIDTH-self.x, self.h-outline),
-                                 (SCREEN_WIDTH-(self.x+10+outline), 2)])
-            
-            pygame.draw.polygon(screen, ocolor,  # Bottom
-                                [(self.x-10-outline, self.y),
-                                 (self.x, SCREEN_HEIGHT-self.h-outline),
-                                 (self.x+10+outline, self.y)])
-        '''
-        # Spikes
-        pygame.draw.polygon(screen, self.color, [(SCREEN_WIDTH-(self.x-10), 2),  # Top
-                                            (SCREEN_WIDTH-self.x, self.h),
-                                            (SCREEN_WIDTH-(self.x+10), 2)])
-
-        pygame.draw.polygon(screen, self.color, [(self.x-10, self.y),  # bottom
-                                            (self.x, SCREEN_HEIGHT-self.h),
-                                            (self.x+10, self.y)])
-
-
-class Soundwave():
-    def __init__(self, x, y, data, color):
-        self.x = x
-        self.y = y
-        self.maxRadius = data*settings['circleSensitivity']
-        self.radius = 0
-        self.done = False
-        if settings['circleColor'] == 'random':
-            self.color = (randint(0,255),
-                          randint(0,255),
-                          randint(0,255))
-        elif settings['circleColor'] == 'fade':
-            self.color = color
-        else:
-            self.color = tuple(map(int,settings['circleColor'].split(',')))
+        if all([(self.step_R >= 0 and self.r >= self.colorTo[0]) or (self.step_R <= 0 and self.r <= self.colorTo[0]),
+            (self.step_G >= 0 and self.g >= self.colorTo[1]) or (self.step_G <= 0 and self.g <= self.colorTo[1]),
+            (self.step_B >= 0 and self.b >= self.colorTo[2]) or (self.step_B <= 0 and self.b <= self.colorTo[2])]):
+            self.transition_needed = True
         
-    def update(self):
-        # movement
-        self.radius += 5
-        # check radius
-        if self.radius >= self.maxRadius:
-            self.done = True
-
-    def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius, 3)
-
-
-def update_config():
-    global settings
-    try:
-        temp = {}
-        settings = {}
-        with open('Config.txt', 'r') as f:
-            i = 0
-            for setting in f.readlines():
-                setting = setting.strip()
-                if setting != '' and setting[0] != '#':
-                    temp[i] = setting.lower()
-                    i += 1
-        # General settings
-        settings['soundwaves'] = temp[0]
-        settings['spikes'] = temp[1]
-        settings['alwaysOnTop'] = temp[2]
-        # Circle settings
-        settings['circleColor'] = temp[3]
-        settings['circlePosition'] = temp[4]
-        settings['circleSensitivity'] = int(temp[5])
-        settings['circleSpawnSensitivity'] = int(temp[6])
-        # Spike settings
-        settings['spikeColor'] = temp[7]
-        settings['spikeSensitivity'] = int(temp[8])
-        settings['spikeSpawnSensitivity'] = int(temp[9])
-        return settings
-    except Exception:
-        windll.user32.MessageBoxW(0, u"Unable to load settings."
-                                  " Config.txt may be formatted incorrectly"
-                                  " or is missing.", u"Error", 0)
-        sys.exit()
-
-
-def transform_range_to_screen_width(pitch):
-    # Put c4 freq at ~center (frequency values up to 1000)
-    # using linear range conversion
-    return ((pitch * SCREEN_WIDTH) / 1000) + 400
+        return self.color
 
 
 if __name__ == "__main__":
