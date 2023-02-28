@@ -15,12 +15,6 @@ import visualizers.blackhole as blackhole
 import visualizers.soundwaves as soundwaves
 import visualizers.perlinfield as perlinfield
 
-# The generative visualizer uses multiple algorithms to generate pleasing
-# visuals using multiple audio signal features mixed with random noise as input
-
-# Each algorithm has its own file and class so the visualizer can create the
-# object, update it, and draw it along with other objects in a list each frame
-
 # TODO
 # generalize all functions involving screen resolution
 
@@ -37,12 +31,12 @@ class Visualizer:
         self.FORMAT = pyaudio.paFloat32
         self.CHANNELS = 1
 
-        # Init aubio pitch detection object
+        # Setup the pitch detection
         self.pDetection = aubio.pitch("default", 2048, self.CHUNK, self.RATE)
         self.pDetection.set_unit("Hz")
         self.pDetection.set_silence(-40)
 
-        # Set up the beat detection algorithm
+        # Set up the beat detection
         win_s = 2048  # Window size
         hop_s = win_s // 2  # Hop size
         samplerate = self.RATE  # Sampling rate
@@ -59,7 +53,6 @@ class Visualizer:
         self.update_config()
 
         # Init pygame and display
-        SetWindowPos = windll.user32.SetWindowPos
         pygame.init()
         os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0, 0)
         self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.NOFRAME)
@@ -67,6 +60,7 @@ class Visualizer:
 
         # Keep window on top
         """ Stopped working for seemingly no reason
+        SetWindowPos = windll.user32.SetWindowPos
         if self.settings['alwaysOnTop'] == 'enabled':
             NOSIZE = 1
             NOMOVE = 2
@@ -75,6 +69,7 @@ class Visualizer:
         """
         pygame.display.set_caption('Desktop Audio Visualizer')
         self.clock = pygame.time.Clock()
+        self.fps = 60
         self.framecount = 0
 
         # Set window transparency color
@@ -99,6 +94,7 @@ class Visualizer:
                         default_speakers = loopback
                         self.RATE=int(default_speakers["defaultSampleRate"])
                         break
+
             self.setup_audio()
             self.default_device = default_speakers
             with p.open(format=self.FORMAT, channels=self.CHANNELS,
@@ -110,20 +106,11 @@ class Visualizer:
                 self.main()
 
     def main(self):
-        valid_algos = {
-            "spikes": spikes.Spikes(self),
-            "blackhole": blackhole.BlackHole(self),
-            "soundwaves": soundwaves.Soundwaves(self),
-            "perlinfield": perlinfield.PerlinField(self)
-        }
-        self.active_algos = []
-        for algo in self.settings["active_algos"]:
-            if algo in valid_algos and valid_algos[algo] not in self.active_algos:
-                self.active_algos.append(valid_algos[algo])
+        self.get_algos()
         self.done = False
         while not self.done:
             # Update settings every second
-            if self.framecount % 60 == 0:
+            if self.framecount % self.fps == 0:
                 self.update_config()
 
             # Process user input
@@ -148,8 +135,20 @@ class Visualizer:
                 obj.draw()
 
             pygame.display.flip()
-            self.clock.tick(60)
+            self.clock.tick(self.fps)
             self.framecount += 1
+
+    def get_algos(self):
+        valid_algos = {
+            "spikes": spikes.Spikes(self),
+            "blackhole": blackhole.BlackHole(self),
+            "soundwaves": soundwaves.Soundwaves(self),
+            "perlinfield": perlinfield.PerlinField(self)
+        }
+        self.active_algos = []
+        for algo in self.settings["active_algos"]:
+            if algo in valid_algos and valid_algos[algo] not in self.active_algos:
+                self.active_algos.append(valid_algos[algo])
 
     def update_config(self):
         with open('Config.txt', 'r') as f:
@@ -190,6 +189,7 @@ class Visualizer:
         if self.max_amplitude != 0:
             scaling_factor /= self.max_amplitude
         return np.average(audio_array) * scaling_factor * self.settings["volume_sensitivity"]  # default 50
+
 
 class ColorFade:
     def __init__(self):

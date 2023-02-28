@@ -5,19 +5,20 @@ class Soundwaves:
     def __init__(self, visualizer):
         self.soundwaves = []
         self.visualizer = visualizer
+        self.position = "center"
 
-    def update(self, pitch, volume):
+    def update(self, pitch, volume, is_beat):
         for soundwave in self.soundwaves:
             soundwave.update()
             if soundwave.done:
                 self.soundwaves.remove(soundwave)
-        if volume >= self.visualizer.settings['circleSpawnSensitivity']:
-            if self.visualizer.settings['circlePosition'] == 'random':
+        if volume >= 0:
+            if self.position == 'random':
                 self.soundwaves.append(Soundwave(self.visualizer, randint(0,self.visualizer.SCREEN_WIDTH), randint(0,self.visualizer.SCREEN_HEIGHT), volume))
-            elif self.visualizer.settings['circlePosition'] == 'center':
+            elif self.position == 'center':
                 self.soundwaves.append(Soundwave(self.visualizer, self.visualizer.SCREEN_WIDTH//2, self.visualizer.SCREEN_HEIGHT//2, volume))
             else:
-                position = list(map(int,self.visualizer.settings['circlePosition'].split(','))) # put coords into tuple
+                position = list(map(int,self.position.split(','))) # put coords into tuple
                 self.soundwaves.append(Soundwave(self.visualizer, position[0], position[1], volume))
 
     def draw(self):
@@ -29,7 +30,7 @@ class Soundwave:
         self.visualizer = visualizer
         self.x = x
         self.y = y
-        self.maxRadius = volume*self.visualizer.settings['circleSensitivity']
+        self.maxRadius = volume*20
         self.radius = 0
         self.done = False
         self.color = self.visualizer.color

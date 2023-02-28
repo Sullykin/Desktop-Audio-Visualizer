@@ -2,7 +2,7 @@
 # Note: Lines with '#' in front of them are ignored by the program.
 
 # Active visualizers (soundwaves, spikes, blackhole)
-spikes
+soundwaves
 
 # Color scheme (Options: RGB, "random", "fade") | RGB example for green: "0,255,0"
 fade
