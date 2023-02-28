@@ -15,21 +15,19 @@ import visualizers.blackhole as blackhole
 import visualizers.soundwaves as soundwaves
 import visualizers.perlinfield as perlinfield
 
-# CORE CHANGES
-# Uses patched pyaudio for loopback capability
-# Applies peak normalization to audio, scaling all amplitudes to effective volumes
-
 # The generative visualizer uses multiple algorithms to generate pleasing
 # visuals using multiple audio signal features mixed with random noise as input
 
 # Each algorithm has its own file and class so the visualizer can create the
 # object, update it, and draw it along with other objects in a list each frame
 
+# TODO
+# generalize all functions involving screen resolution
+
 class Visualizer:
     """ This object processes the audio signal and passes the values to all enabled visualizers """
     def __init__(self):
         self.setup_display()
-        self.setup_audio()
         self.color = (0,0,0)
         self.colorfade = ColorFade()
 
@@ -38,7 +36,6 @@ class Visualizer:
         self.CHUNK = 1024
         self.FORMAT = pyaudio.paFloat32
         self.CHANNELS = 1
-        self.RATE = 48000
 
         # Init aubio pitch detection object
         self.pDetection = aubio.pitch("default", 2048, self.CHUNK, self.RATE)
@@ -65,19 +62,23 @@ class Visualizer:
         SetWindowPos = windll.user32.SetWindowPos
         pygame.init()
         os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0, 0)
-        self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT),
-                                              pygame.NOFRAME)
-        if True:#self.settings['alwaysOnTop'] == 'enabled':
-            SetWindowPos(
-                pygame.display.get_wm_info()['window'], -1, 0, 0, 0, 0, 0x0001
-                )
+        self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.NOFRAME)
+        hwnd = pygame.display.get_wm_info()['window']
+
+        # Keep window on top
+        """ Stopped working for seemingly no reason
+        if self.settings['alwaysOnTop'] == 'enabled':
+            NOSIZE = 1
+            NOMOVE = 2
+            TOPMOST = -1
+            SetWindowPos(hwnd, TOPMOST, 0, 0, 0, 0, NOMOVE|NOSIZE)
+        """
         pygame.display.set_caption('Desktop Audio Visualizer')
         self.clock = pygame.time.Clock()
         self.framecount = 0
 
         # Set window transparency color
         self.fuchsia = (255, 0, 128)  # Transparency color
-        hwnd = win32gui.FindWindow(None, "Desktop Audio Visualizer")
         lExStyle = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
         lExStyle |= win32con.WS_EX_TRANSPARENT | win32con.WS_EX_LAYERED
         win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, lExStyle)
@@ -91,12 +92,14 @@ class Visualizer:
             wasapi_info = p.get_host_api_info_by_type(pyaudio.paWASAPI)
             default_speakers = p.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
             
+            self.RATE = 44100
             if not default_speakers["isLoopbackDevice"]:
                 for loopback in p.get_loopback_device_info_generator():
                     if default_speakers["name"] in loopback["name"]:
                         default_speakers = loopback
-                        self.rate=int(default_speakers["defaultSampleRate"])
+                        self.RATE=int(default_speakers["defaultSampleRate"])
                         break
+            self.setup_audio()
             self.default_device = default_speakers
             with p.open(format=self.FORMAT, channels=self.CHANNELS,
                         rate=self.RATE, input=True,
@@ -233,7 +236,6 @@ class ColorFade:
             self.transition_needed = True
         
         return self.color
-
 
 if __name__ == "__main__":
     visualizer = Visualizer()
