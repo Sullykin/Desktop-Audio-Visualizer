@@ -6,73 +6,65 @@ import win32api, win32con, win32gui
 from screeninfo import get_monitors
 from ctypes import windll
 import os, sys
-from winreg import *
 from hashlib import md5
 
-# Algos
+import visualizers.soundwaves as soundwaves
+import visualizers.freq_spikes as freq_spikes
 import visualizers.spikes as spikes
 import visualizers.blackhole as blackhole
-import visualizers.soundwaves as soundwaves
-import visualizers.perlinfield as perlinfield
+#import visualizers.spirograph as spirograph
+#import visualizers.perlinfield as perlinfield
 
 # TODO
-# generalize all functions involving screen resolution
+# setup new beat detection
+# consider adding higher quality mode after getting new pc
 
 class Visualizer:
-    """ This object processes the audio signal and passes the values to all enabled visualizers """
     def __init__(self):
-        self.setup_display()
         self.color = (0,0,0)
         self.colorfade = ColorFade()
-
-    def setup_audio(self):
-        # init pyaudio vars
-        self.CHUNK = 1024
-        self.FORMAT = pyaudio.paFloat32
-        self.CHANNELS = 1
-
-        # Setup the pitch detection
-        self.pDetection = aubio.pitch("default", 2048, self.CHUNK, self.RATE)
-        self.pDetection.set_unit("Hz")
-        self.pDetection.set_silence(-40)
-
-        # Set up the beat detection
-        win_s = 2048  # Window size
-        hop_s = win_s // 2  # Hop size
-        samplerate = self.RATE  # Sampling rate
-        self.tempo = aubio.tempo("default", win_s, hop_s, samplerate)
+        self.settings_checksum = ""
+        self.update_config(startup=True)
+        self.setup_display()
+        self.algos = {
+            "pitch_spikes": spikes.Spikes(self),
+            "blackhole": blackhole.BlackHole(self),
+            "soundwaves": soundwaves.Soundwaves(self),
+            #"perlinfield": perlinfield.PerlinField(self),
+            #"spirograph": spirograph.Spirograph(self),
+            "freq_spikes": freq_spikes.FreqSpikes(self)
+        }
+        self.get_algo()
         self.max_amplitude = 0
+        self.done = False
 
     def setup_display(self):
         monitor = get_monitors()[0]
         self.SCREEN_WIDTH = monitor.width
         self.SCREEN_HEIGHT = monitor.height
-
-        # Fetch initial settings
-        self.settings_checksum = ""
-        self.update_config()
-
-        # Init pygame and display
         pygame.init()
         os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0, 0)
-        self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.NOFRAME)
+        self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT),pygame.NOFRAME)
         hwnd = pygame.display.get_wm_info()['window']
+        #self.keep_topmost(hwnd)
+        self.set_window_transparency(hwnd)
+        pygame.display.set_caption('Desktop Audio Visualizer')
+        self.clock = pygame.time.Clock()
+        self.fps = 60
+        self.framecount = 0
 
-        # Keep window on top
-        """ Stopped working for seemingly no reason
+    # Stopped working for seemingly no reason
+    """
+    def keep_topmost(self, hwnd):
         SetWindowPos = windll.user32.SetWindowPos
         if self.settings['alwaysOnTop'] == 'enabled':
             NOSIZE = 1
             NOMOVE = 2
             TOPMOST = -1
             SetWindowPos(hwnd, TOPMOST, 0, 0, 0, 0, NOMOVE|NOSIZE)
-        """
-        pygame.display.set_caption('Desktop Audio Visualizer')
-        self.clock = pygame.time.Clock()
-        self.fps = 60
-        self.framecount = 0
+    """
 
-        # Set window transparency color
+    def set_window_transparency(self, hwnd):
         self.fuchsia = (255, 0, 128)  # Transparency color
         lExStyle = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
         lExStyle |= win32con.WS_EX_TRANSPARENT | win32con.WS_EX_LAYERED
@@ -81,12 +73,23 @@ class Visualizer:
                                             win32api.RGB(*self.fuchsia), 0,
                                             win32con.LWA_COLORKEY)
 
+    def setup_audio(self):
+        self.CHUNK = 2048
+        self.FORMAT = pyaudio.paFloat32
+        self.CHANNELS = 1
+        self.setup_pitch_detection()
+
+    def setup_pitch_detection(self):
+        self.pDetection = aubio.pitch("default", 4096, self.CHUNK, self.RATE)
+        self.pDetection.set_unit("Hz")
+        self.pDetection.set_silence(-40)
+
     def start(self):
         with pyaudio.PyAudio() as p:
             # Get default WASAPI speakers
             wasapi_info = p.get_host_api_info_by_type(pyaudio.paWASAPI)
             default_speakers = p.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
-            
+
             self.RATE = 44100
             if not default_speakers["isLoopbackDevice"]:
                 for loopback in p.get_loopback_device_info_generator():
@@ -96,18 +99,16 @@ class Visualizer:
                         break
 
             self.setup_audio()
-            self.default_device = default_speakers
-            with p.open(format=self.FORMAT, channels=self.CHANNELS,
-                        rate=self.RATE, input=True,
+            with p.open(format=self.FORMAT, 
+                        channels=self.CHANNELS,
+                        rate=self.RATE,
+                        input=True,
                         frames_per_buffer=self.CHUNK,
-                        input_device_index=self.default_device["index"]
-            ) as stream:
-                self.stream = stream
+                        input_device_index=default_speakers["index"]
+            ) as self.stream:
                 self.main()
 
     def main(self):
-        self.get_algos()
-        self.done = False
         while not self.done:
             # Update settings every second
             if self.framecount % self.fps == 0:
@@ -118,40 +119,38 @@ class Visualizer:
                 if event.type == pygame.QUIT:
                     self.done = True
 
-            # Calculate pitch and volume for this frame
+            # read in audio and calculate signal properties
             frame = self.stream.read(self.CHUNK)
             samples = np.frombuffer(frame, dtype=aubio.float_type)
-            pitch = int(self.pDetection(samples)[0])
-            abs_values = np.abs(samples)*100
-            current_max_amp = int(np.max(abs_values))
-            volume = int(self.normalize_volume(current_max_amp, abs_values))
-            is_beat = self.tempo(samples)
+            audio_features = self.process_audio(samples)
 
             # update and draw visuals
             self.screen.fill(self.fuchsia)
-            self.color = self.colorfade.next()
-            for obj in self.active_algos:
-                obj.update(pitch, volume, is_beat)
-                obj.draw()
+            if self.settings["color_scheme"] == "fade":
+                self.color = self.colorfade.next()
+            self.active_algo.update(audio_features)
+            self.active_algo.draw()
 
             pygame.display.flip()
             self.clock.tick(self.fps)
             self.framecount += 1
 
-    def get_algos(self):
-        valid_algos = {
-            "spikes": spikes.Spikes(self),
-            "blackhole": blackhole.BlackHole(self),
-            "soundwaves": soundwaves.Soundwaves(self),
-            "perlinfield": perlinfield.PerlinField(self)
+    def process_audio(self, samples):
+        pitch = int(self.pDetection(samples)[0])
+        abs_values = np.abs(samples)*100
+        volume = int(np.max(abs_values))#self.normalize_volume(abs_values))
+        windowed_data = samples * self.hann_window(self.CHUNK)
+        fft = np.fft.fft(windowed_data)
+        amps = np.abs(fft)
+        return {
+                "fft": fft,
+                "amps": amps,
+                "pitch": pitch,
+                "volume": volume,
         }
-        self.active_algos = []
-        for algo in self.settings["active_algos"]:
-            if algo in valid_algos and valid_algos[algo] not in self.active_algos:
-                self.active_algos.append(valid_algos[algo])
 
-    def update_config(self):
-        with open('Config.txt', 'r') as f:
+    def update_config(self, startup=False):
+        with open('config.txt', 'r') as f:
             new_checksum = md5(f.read().encode()).hexdigest()
             if self.settings_checksum:
                 if new_checksum == self.settings_checksum:
@@ -160,25 +159,47 @@ class Visualizer:
         try:
             temp = {}
             settings = {}
-            with open('Config.txt', 'r') as f:
+            with open('config.txt', 'r') as f:
                 i = 0
                 for setting in f.readlines():
                     setting = setting.strip()
                     if setting != '' and setting[0] != '#':
                         temp[i] = setting.lower()
                         i += 1
-            # General settings
-            settings['active_algos'] = temp[0].split(', ')
+            settings['active_algo'] = temp[0]
             settings['color_scheme'] = temp[1]
             settings['volume_sensitivity'] = int(temp[2])
             self.settings = settings
-        except Exception:
+            if not startup:
+                self.get_algo()
+            if temp[1].count(",") == 2:
+                self.color = tuple([int(i) for i in temp[1].split(",")])
+                self.settings["color_scheme"] = self.color
+        except Exception as e:
+            print(e)
             windll.user32.MessageBoxW(0, u"Unable to load settings."
-                                    " Config.txt may be formatted incorrectly"
+                                    " config.txt may be formatted incorrectly"
                                     " or is missing.", u"Error", 0)
             sys.exit()
 
-    def normalize_volume(self, current_max_amp, audio_array):
+    def get_algo(self):
+        valid_algos = [
+            "pitch_spikes",
+            "blackhole",
+            "soundwaves",
+            #"perlinfield",
+            #"spirograph",
+            "freq_spikes"
+        ]
+        algo = self.settings["active_algo"]
+        if algo in valid_algos:
+            self.active_algo = self.algos[algo]
+
+    def hann_window(self, length):
+        return 0.5 * (1 - np.cos(2 * np.pi * np.arange(length) / (length - 1)))
+
+    def normalize_volume(self, audio_array):
+        current_max_amp = int(np.max(audio_array))
         if current_max_amp > self.max_amplitude:
             self.max_amplitude = current_max_amp
         # Reset the maximum amplitude to zero if the current maximum is zero

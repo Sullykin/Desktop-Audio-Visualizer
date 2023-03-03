@@ -4,6 +4,8 @@ import pygame.gfxdraw
 import numpy as np
 import random
 
+# emite soundwaves through the disk, brightening the color via pitch or amp
+
 class BlackHole:
     def __init__(self, visualizer):
         self.jets = Jet(visualizer)
@@ -12,47 +14,33 @@ class BlackHole:
         self.visualizer = visualizer
         self.radius = 100
         self.distortion_factor = 0.005
+        screen_w = visualizer.SCREEN_WIDTH
+        screen_h = visualizer.SCREEN_HEIGHT
+        self.center = (screen_w//2,screen_h//2)
 
-    def update(self, pitch, volume, is_beat):
-        if is_beat and self.accretion_disk.disk_speed >= 0.1:
+    def update(self, audio_features):
+        volume = audio_features["volume"]
+        if self.accretion_disk.disk_speed >= 0.1:
             self.jets.active = True
         elif self.accretion_disk.disk_speed < 0.09:
             self.jets.active = False
 
-        self.accretion_disk.update(pitch, volume, is_beat)
+        self.accretion_disk.update(volume)
         disk_normal = self.jets.particle_system.rotate_points_around_axis(self.accretion_disk.rotation_speed, self.accretion_disk.rotation_axis, self.accretion_disk.center, self.accretion_disk.disk_normal)
         self.jets.update(disk_normal)
 
     def draw(self):
-        #self.visualizer.screen.fill((10,10,10))
-        pygame.draw.circle(self.visualizer.screen, (0,0,0), (1920//2,1080//2), self.radius)
-        #self.draw_distorted_circle(self.visualizer.screen, (255, 255, 255), (1920/2,1080/2), self.radius*3, self.distortion_factor)
+        pygame.draw.circle(self.visualizer.screen, (0,0,0), self.center, self.radius)
         self.accretion_disk.draw()
         self.jets.draw()
-
-    # Define a function to draw a distorted circle
-    def draw_distorted_circle(self, surface, color, center, radius, distortion_factor):
-        # Create a meshgrid of points within the circle
-        x, y = np.meshgrid(np.arange(center[0]-radius, center[0]+radius+1), np.arange(center[1]-radius, center[1]+radius+1))
-        points = np.vstack((x.flatten(), y.flatten())).T
-        
-        # Calculate the displacement of each point due to the gravitational lensing effect
-        displacement = (points - center) * (np.linalg.norm(points - center, axis=1) ** 2 * distortion_factor)
-        displacement = np.expand_dims(displacement, axis=1)
-
-        for i in range(360):
-            start_angle = np.radians(i)
-            end_angle = np.radians(i+1)
-            start_point = (np.cos(start_angle) * radius, np.sin(start_angle) * radius)
-            start_point = (start_point[0] + center[0] + displacement[i][0], start_point[1] + center[1] + displacement[i][1])
-            start_point = tuple(map(int, start_point))  # Convert start_point to a tuple of integers
-            pygame.draw.arc(surface, color, pygame.Rect(start_point[0]-radius, start_point[1]-radius, radius * 2, radius * 2), start_angle, end_angle, 1)
 
 
 class AccretionDisk:
     def __init__(self, visualizer):
         self.visualizer = visualizer
-        self.center = (1920//2,1080//2,0)
+        self.screen_w = visualizer.SCREEN_WIDTH
+        self.screen_h = visualizer.SCREEN_HEIGHT
+        self.center = (self.screen_w//2,self.screen_h//2,0)
         self.inner_radius = 150
         self.outer_radius = 500
         self.rotation_speed = 0.005  # radians per frame
@@ -63,7 +51,7 @@ class AccretionDisk:
         self.disk_normal = np.array([0,0,1])
         self.target_disk_normal = np.array([0.1,0.9,0])
         self.color = self.visualizer.color
-        num_particles = 6000
+        num_particles = 4000
         disk_positions = generate_disk_points(num_particles, self.inner_radius, self.outer_radius, self.center)
         self.particle_system = ParticleSystem(visualizer, disk_positions)
 
@@ -72,10 +60,8 @@ class AccretionDisk:
         #self.jets.particle_system.positions = transform_disk(self.disk_normal, self.jets.particle_system.positions, self.target_disk_normal)
         #self.disk_normal = self.target_disk_normal
 
-    def update(self, pitch, volume, is_beat):
+    def update(self, volume):
         self.color = self.visualizer.color
-        if is_beat:
-            self.color = tuple(min(255, max(0, c + 100)) for c in self.color)
         if volume > 12 and self.disk_speed <= 0.1:
             self.disk_speed += 0.001
         elif self.disk_speed > 0.005:
@@ -83,6 +69,7 @@ class AccretionDisk:
         self.disk_normal = self.particle_system.rotate_points_around_axis(self.rotation_speed, self.rotation_axis, self.center, self.disk_normal)
         disk_normal = self.particle_system.rotate_points_around_axis(self.disk_speed, self.disk_normal, self.center, self.disk_normal)
 
+        # randomly change the rotation axis
         if random.random() < 0.001:
             axis = random.randint(0,2)
             self.rotation_axis[axis] += random.uniform(-0.2, 0.2)
@@ -92,14 +79,16 @@ class AccretionDisk:
     def draw(self):
         self.particle_system.draw(self.color)
 
+    """
     def check_target_axis(self):
         t_np = self.disk_normal
         target_np = np.array(self.target_axis)
         within_tolerance = np.allclose(t_np, target_np, rtol=0, atol=self.tolerance)
         if within_tolerance and not self.jets.particle_system.positions.any():
             target_vec = [0,1,0]
-            self.particle_system.positions = transform_disk(self.disk_normal, self.particle_system.positions, target_vec, 1920, 1080)
+            self.particle_system.positions = transform_disk(self.disk_normal, self.particle_system.positions, target_vec, self.screen_w, self.screen_h)
             self.disk_normal = target_vec
+    """
 
 
 class Jet:
@@ -107,7 +96,7 @@ class Jet:
         self.visualizer = visualizer
         self.color = visualizer.color
         self.particle_rate = 30
-        jet_positions = generate_jet_positions(num_particles=10, jet_radius=10, jet_height=100)
+        jet_positions = generate_jet_positions(num_particles=1, jet_radius=10, jet_height=100, center=(visualizer.SCREEN_WIDTH/2, visualizer.SCREEN_HEIGHT/2))
         self.particle_system = ParticleSystem(visualizer, jet_positions)
         self.active = False
 
@@ -125,17 +114,19 @@ class Jet:
 class ParticleSystem:
     def __init__(self, visualizer, positions=np.array([])):
         self.visualizer = visualizer
-        self.center = (1920//2,1080//2,0)
+        self.screen_w = visualizer.SCREEN_WIDTH
+        self.screen_h = visualizer.SCREEN_HEIGHT
+        self.center = (self.screen_w//2,self.screen_h//2,0)
         self.positions = positions
 
     def update(self, disk_normal):
         self.positions = translate_points_away_from_disk(self.positions, disk_normal, translation_speed=30)
-        self.positions = self.remove_offscreen_particles(self.positions, 1920, 1080)
+        self.positions = self.remove_offscreen_particles(self.positions, self.screen_w, self.screen_h)
 
     def draw(self, color):
         for position in self.positions:
             point2d = (int(position[0]), int(position[1]))
-            distance2d = math.sqrt((point2d[0] - 1920//2) ** 2 + (point2d[1] - 1080//2) ** 2)
+            distance2d = math.sqrt((point2d[0] - self.screen_w//2) ** 2 + (point2d[1] - self.screen_h//2) ** 2)
             distance3d = math.sqrt(distance2d ** 2 + position[2] ** 2)
             if not ((int(position[2]) < 0) and distance2d <= 100) and (distance3d >= 100):
                 pygame.draw.circle(self.visualizer.screen, color, point2d, 1)
@@ -159,10 +150,10 @@ class ParticleSystem:
         self.positions = rotated_points
         return disk_normal
 
-    def translate_points_to_center(self, points, indices, center=np.array([1920/2, 1080/2, 0])):
+    def translate_points_to_center(self, points, indices):
         # translate the chosen points towards the center
         for i in indices:
-            points[i] = points[i] - 0.01 * (points[i] - center)
+            points[i] = points[i] - 0.01 * (points[i] - self.center)
         return points
 
     def remove_offscreen_particles(self, positions, screen_width, screen_height):
@@ -193,6 +184,7 @@ def generate_disk_points(num_points, min_radius, max_radius, center):
     z = np.zeros(num_points) + center[2]
     return np.array([x, y, z]).T
 
+"""
 def transform_disk(normal_vec, points, target_normal_vec):
     # Define a scaling matrix to convert from Pygame's coordinate system to standard Cartesian coordinates
     S = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
@@ -226,17 +218,8 @@ def transform_disk(normal_vec, points, target_normal_vec):
     new_points = unscaled_points + center
     
     return new_points
-    # From https://stackoverflow.com/a/6802723
-    axis = np.asarray(axis)
-    axis = axis / np.sqrt(np.dot(axis, axis))
-    a = np.cos(angle/2.0)
-    b, c, d = -axis * np.sin(angle/2.0)
-    aa, bb, cc, dd = a*a, b*b, c*c, d*d
-    bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
-    return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
-                     [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
-                     [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
-                    
+"""
+
 def translate_points_away_from_disk(points, disk_normal, translation_speed=10, disk_center=np.array([960, 540, 0])):
     """Translates points away from a 3D disk of particles."""
     # Normalize the normal vector
@@ -252,12 +235,12 @@ def translate_points_away_from_disk(points, disk_normal, translation_speed=10, d
     points[below_disk] -= normal_vector * translation_speed
     return points
 
-def generate_jet_positions(num_particles, jet_radius, jet_height):
+def generate_jet_positions(num_particles, jet_radius, jet_height, center):
     # Generate particle positions along a circular arc around the black hole
     positions = []
     for i in range(num_particles):
         # Calculate x and y coordinates of particle position
-        x, y = rand_point(jet_radius, 1920/2, 1080/2)
+        x, y = rand_point(jet_radius, center[0], center[1])
         # Choose random height along the jet
         z_up = random.uniform(100, jet_height)
         z_down = random.uniform(-100, -jet_height)

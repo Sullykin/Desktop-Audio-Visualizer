@@ -1,11 +1,11 @@
-# Settings
+# SETTINGS
 # Note: Lines with '#' in front of them are ignored by the program.
 
-# Active visualizers (soundwaves, spikes, blackhole)
-soundwaves
+# Active visualizer (soundwaves, freq_spikes, pitch_spikes)
+freq_spikes
 
-# Color scheme (Options: RGB, "random", "fade") | RGB example for green: "0,255,0"
+# Color scheme (RGB, fade) | RGB example for green: 0,255,0
 fade
 
-# Volume sensitivity
-50
+# Volume sensitivity (0 to 100)
+20
