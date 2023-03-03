@@ -4,7 +4,7 @@ import pygame.gfxdraw
 import numpy as np
 import random
 
-# emite soundwaves through the disk, brightening the color via pitch or amp
+# emite soundwaves through the disk, brightening the color via pitch or amp; requires using distance from center formula
 
 class BlackHole:
     def __init__(self, visualizer):
@@ -13,10 +13,7 @@ class BlackHole:
         self.accretion_disk.jets = self.jets
         self.visualizer = visualizer
         self.radius = 100
-        self.distortion_factor = 0.005
-        screen_w = visualizer.SCREEN_WIDTH
-        screen_h = visualizer.SCREEN_HEIGHT
-        self.center = (screen_w//2,screen_h//2)
+        self.center = (visualizer.SCREEN_WIDTH//2,visualizer.SCREEN_HEIGHT//2)
 
     def update(self, audio_features):
         volume = audio_features["volume"]
@@ -43,22 +40,28 @@ class AccretionDisk:
         self.center = (self.screen_w//2,self.screen_h//2,0)
         self.inner_radius = 150
         self.outer_radius = 500
+        self.color = self.visualizer.color
+        self.setup_transformation_vars()
+        disk_positions = generate_disk_points(4000, self.inner_radius, self.outer_radius, self.center)
+        self.particle_system = ParticleSystem(visualizer, disk_positions)
+        # self.rotate_from_start_pos(self, target_vector=np.array([0.1,0.9,0]))
+
+    """
+    def rotate_from_start_pos(self, target_vector):
+        # Rotate the disk and jet to a specified vector before starting
+        # has minor issue with disk spin axis
+        self.particle_system.positions = transform_disk(self.disk_normal, self.particle_system.positions, target_vector)
+        self.jets.particle_system.positions = transform_disk(self.disk_normal, self.jets.particle_system.positions, target_vector)
+        self.disk_normal = target_vector
+    """
+
+    def setup_transformation_vars(self):
         self.rotation_speed = 0.005  # radians per frame
         self.disk_speed = 0.05
-        self.rotation_axis = [0.1,0.1,0.3]
+        self.rotation_axis = [0.4,0.7,0.1]
         self.target_axis = [0,0,1]
         self.tolerance = 0.01
         self.disk_normal = np.array([0,0,1])
-        self.target_disk_normal = np.array([0.1,0.9,0])
-        self.color = self.visualizer.color
-        num_particles = 4000
-        disk_positions = generate_disk_points(num_particles, self.inner_radius, self.outer_radius, self.center)
-        self.particle_system = ParticleSystem(visualizer, disk_positions)
-
-        """ Rotate the disk and jet to a specified vector before starting """
-        #self.particle_system.positions = transform_disk(self.disk_normal, self.particle_system.positions, self.target_disk_normal)
-        #self.jets.particle_system.positions = transform_disk(self.disk_normal, self.jets.particle_system.positions, self.target_disk_normal)
-        #self.disk_normal = self.target_disk_normal
 
     def update(self, volume):
         self.color = self.visualizer.color
@@ -68,13 +71,14 @@ class AccretionDisk:
             self.disk_speed -= 0.0002
         self.disk_normal = self.particle_system.rotate_points_around_axis(self.rotation_speed, self.rotation_axis, self.center, self.disk_normal)
         disk_normal = self.particle_system.rotate_points_around_axis(self.disk_speed, self.disk_normal, self.center, self.disk_normal)
+        self.randomize_rotation_axis()
+        #self.check_target_axis()
 
-        # randomly change the rotation axis
+    def randomize_rotation_axis(self):
+        # slightly change the rotation axis at random intervals
         if random.random() < 0.001:
             axis = random.randint(0,2)
             self.rotation_axis[axis] += random.uniform(-0.2, 0.2)
-
-        #self.check_target_axis()
 
     def draw(self):
         self.particle_system.draw(self.color)
@@ -123,12 +127,15 @@ class ParticleSystem:
         self.positions = translate_points_away_from_disk(self.positions, disk_normal, translation_speed=30)
         self.positions = self.remove_offscreen_particles(self.positions, self.screen_w, self.screen_h)
 
-    def draw(self, color):
+    def draw(self, color): # 900, 500, 200
+        radius_squared = 100 ** 2   
         for position in self.positions:
-            point2d = (int(position[0]), int(position[1]))
-            distance2d = math.sqrt((point2d[0] - self.screen_w//2) ** 2 + (point2d[1] - self.screen_h//2) ** 2)
-            distance3d = math.sqrt(distance2d ** 2 + position[2] ** 2)
-            if not ((int(position[2]) < 0) and distance2d <= 100) and (distance3d >= 100):
+            int_position = [int(x) for x in position]
+            point2d = (int_position[0], position[1])
+            distance2d_squared = (point2d[0] - self.screen_w//2) ** 2 + (point2d[1] - self.screen_h//2) ** 2
+            distance3d_squared = distance2d_squared + position[2] ** 2
+            # if not inside sphere or behind it
+            if not (distance3d_squared <= radius_squared) and not (distance2d_squared <= radius_squared and position[2] < 100):
                 pygame.draw.circle(self.visualizer.screen, color, point2d, 1)
 
     def rotate_points_around_axis(self, angle, axis, center, disk_normal):
@@ -216,7 +223,7 @@ def transform_disk(normal_vec, points, target_normal_vec):
     unscaled_points = np.dot(S, rotated_points.T).T
     # Step 5: Apply the translation to move the disk back to the center of the screen
     new_points = unscaled_points + center
-    
+
     return new_points
 """
 
