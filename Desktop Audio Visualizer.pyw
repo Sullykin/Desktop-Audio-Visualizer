@@ -19,6 +19,7 @@ import visualizers.blackhole as blackhole
 # setup new beat detection
 # consider adding higher quality mode after getting new pc
 
+
 class Visualizer:
     def __init__(self):
         self.color = (0,0,0)
@@ -97,6 +98,7 @@ class Visualizer:
                         default_speakers = loopback
                         self.RATE=int(default_speakers["defaultSampleRate"])
                         break
+            print(self.RATE)
 
             self.setup_audio()
             with p.open(format=self.FORMAT, 
