@@ -5,6 +5,7 @@ import numpy as np
 import win32api, win32con, win32gui
 from screeninfo import get_monitors
 from ctypes import windll
+import ctypes.wintypes
 import os, sys
 from hashlib import md5
 
@@ -46,31 +47,30 @@ class Visualizer:
         pygame.init()
         os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0, 0)
         self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT),pygame.NOFRAME)
-        hwnd = pygame.display.get_wm_info()['window']
-        #self.keep_topmost(hwnd)
-        self.set_window_transparency(hwnd)
+        self.hwnd = pygame.display.get_wm_info()['window']
+        self.keep_topmost()
+        self.set_window_transparency()
         pygame.display.set_caption('Desktop Audio Visualizer')
         self.clock = pygame.time.Clock()
         self.fps = 60
         self.framecount = 0
 
-    # Stopped working for seemingly no reason
-    """
-    def keep_topmost(self, hwnd):
+    # FIXED with https://stackoverflow.com/questions/74589479/making-window-topmost-with-python-and-or-windows-api
+    # Note: Cannot overlay fullscreen applications
+    def keep_topmost(self):
         SetWindowPos = windll.user32.SetWindowPos
-        if self.settings['alwaysOnTop'] == 'enabled':
+        if self.settings['always_on_top'] == 'true':
             NOSIZE = 1
             NOMOVE = 2
             TOPMOST = -1
-            SetWindowPos(hwnd, TOPMOST, 0, 0, 0, 0, NOMOVE|NOSIZE)
-    """
+            SetWindowPos(self.hwnd, ctypes.wintypes.HWND(TOPMOST), 0, 0, 0, 0, NOMOVE|NOSIZE)
 
-    def set_window_transparency(self, hwnd):
+    def set_window_transparency(self):
         self.fuchsia = (255, 0, 128)  # Transparency color
-        lExStyle = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+        lExStyle = win32gui.GetWindowLong(self.hwnd, win32con.GWL_EXSTYLE)
         lExStyle |= win32con.WS_EX_TRANSPARENT | win32con.WS_EX_LAYERED
-        win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, lExStyle)
-        win32gui.SetLayeredWindowAttributes(hwnd,
+        win32gui.SetWindowLong(self.hwnd, win32con.GWL_EXSTYLE, lExStyle)
+        win32gui.SetLayeredWindowAttributes(self.hwnd,
                                             win32api.RGB(*self.fuchsia), 0,
                                             win32con.LWA_COLORKEY)
 
@@ -171,9 +171,11 @@ class Visualizer:
             settings['active_algo'] = temp[0]
             settings['color_scheme'] = temp[1]
             settings['volume_sensitivity'] = int(temp[2])
+            settings['always_on_top'] = temp[3]
             self.settings = settings
             if not startup:
                 self.get_algo()
+                self.keep_topmost()
             if temp[1].count(",") == 2:
                 self.color = tuple([int(i) for i in temp[1].split(",")])
                 self.settings["color_scheme"] = self.color

@@ -5,7 +5,10 @@
 freq_spikes
 
 # Color scheme (RGB, fade) | RGB example for green: 0,255,0
-fade
+255,0,0
 
 # Volume sensitivity (0 to 100)
-20
+30
+
+# Keep window on top (true, false)
+true
