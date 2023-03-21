@@ -48,7 +48,7 @@ class Spike:
     def update(self, amplitude):
         # move spike up if current height lower than target height or vice versa
         target_h = int(min((amplitude**1.5)*(self.visualizer.settings["volume_sensitivity"]/3), 300))
-        speed = np.abs(target_h - self.h) / 3.5
+        speed = np.abs(target_h - self.h) / 3#3.5
         if self.h < target_h:
             self.h += speed
         elif self.h > target_h:

@@ -59,11 +59,13 @@ class Visualizer:
     # Note: Cannot overlay fullscreen applications
     def keep_topmost(self):
         SetWindowPos = windll.user32.SetWindowPos
+        NOSIZE = 1
+        NOMOVE = 2
+        TOPMOST = -1
         if self.settings['always_on_top'] == 'true':
-            NOSIZE = 1
-            NOMOVE = 2
-            TOPMOST = -1
             SetWindowPos(self.hwnd, ctypes.wintypes.HWND(TOPMOST), 0, 0, 0, 0, NOMOVE|NOSIZE)
+        else:
+            SetWindowPos(self.hwnd, 0, 0, 0, 0, 0)
 
     def set_window_transparency(self):
         self.fuchsia = (255, 0, 128)  # Transparency color
