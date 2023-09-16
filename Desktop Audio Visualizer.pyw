@@ -211,6 +211,7 @@ class Visualizer:
     def process_config_change(self):
         self.sensitivity = self.settings["volume_sensitivity"]
         self.color_scheme = self.settings["color_scheme"]
+        self.color = self.settings["static_color"]
         fade_cycle = self.settings["fade_cycle"]
         fade_speed = self.settings["fade_speed"]
         self.colorfade = ColorFade(fade_cycle, fade_speed)

@@ -9,6 +9,7 @@ import os
 SETTING_SCHEMA = {
     "active_visualizer": {"type": str, "valid_values": ["pitch_spikes", "blackhole", "soundwaves", "freq_spikes", "particle_field"]},
     "color_scheme": {"type": str, "valid_values": ["fade", "static"]},
+    "static_color": {"type": list, "length": 3, "tuple_range": [(0, 255), (0, 255), (0, 255)]},
     "fade_cycle": {"type": str, "valid_values": ["rainbow", "rgb", "warm", "cool"]},
     "fade_speed": {"type": int, "range": (1, 50)},
     "volume_sensitivity": {"type": int, "range": (0, 100)},
@@ -45,7 +46,7 @@ SETTING_SCHEMA = {
     "particle_field": {
         "type": dict,
         "sub_keys": {
-            "grid_size": {"type": int, "range": (1, 4)},
+            "grid_size": {"type": int, "range": (1, 3)},
             "zoom_factor": {"type": int, "range": (1, 10)},
             "edge_waves": {"type": bool},
             "radial_waves": {"type": bool}
@@ -75,14 +76,15 @@ class Config:
         self.default_settings = {
             "active_visualizer": "freq_spikes",
             "color_scheme": "fade",
+            "static_color": [50, 6, 225],
             "fade_cycle": "rainbow",
-            "fade_speed": 2,
+            "fade_speed": 3,
             "volume_sensitivity": 50,
             "keep_topmost": False,
             "high_res_audio": False,
             "freq_spikes": {
-                "mirror_x": True,
-                "mirror_y": False,
+                "mirror_x": False,
+                "mirror_y": True,
                 "invert_x_mirror": False,
                 "invert_y_mirror": True,
                 "bins": 120
@@ -101,7 +103,7 @@ class Config:
             },
             "particle_field": {
                 "grid_size": 2,
-                "zoom_factor": 1.3,
+                "zoom_factor": 3,
                 "edge_waves": True,
                 "radial_waves": True
             }
@@ -126,13 +128,16 @@ class Config:
         self.observer.join()
 
     def load_from_file(self, startup=False):
-        with open(self.filepath, 'r') as f:
-            try:
-                self.settings = json.load(f)
-                #print(f"Configuration loaded: {self.settings}")
-            except json.JSONDecodeError as e:
-                self.settings = self.default_settings
-                #print(f"Failed to load configuration: {e}")
+        try:
+            with open(self.filepath, 'r') as f:
+                try:
+                    self.settings = json.load(f)
+                    #print(f"Configuration loaded: {self.settings}")
+                except json.JSONDecodeError as e:
+                    self.settings = self.default_settings
+                    #print(f"Failed to load configuration: {e}")
+        except FileNotFoundError as e:
+            windll.user32.MessageBoxW(0, f"Config file not found. {e}", u"Error", 0)
 
         errors = self.validate_settings(self.settings, SETTING_SCHEMA)
         if errors:
@@ -168,6 +173,15 @@ class Config:
             # Check against a list of valid values
             if "valid_values" in rule and value not in rule["valid_values"]:
                 errors.append(f"Invalid value for '{full_key}'. Must be one of {rule['valid_values']}")
+
+            if expected_type == list:
+                if "length" in rule and len(value) != rule["length"]:
+                    errors.append(f"Invalid length for '{full_key}'. Expected length {rule['length']}, got {len(value)}")
+
+                if "tuple_range" in rule:
+                    for i, (min_val, max_val) in enumerate(rule["tuple_range"]):
+                        if not (min_val <= value[i] <= max_val):
+                            errors.append(f"Invalid value for '{full_key}[{i}]'. Must be between {min_val} and {max_val}")
 
             # Check against a range
             if "range" in rule:

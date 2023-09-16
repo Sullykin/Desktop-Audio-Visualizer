@@ -1,8 +1,9 @@
 {
-    "active_visualizer": "soundwaves",
-    "color_scheme": "fade",
+    "active_visualizer": "freq_spikes",
+    "color_scheme": "static",
+    "static_color": [100, 30, 225],
     "fade_cycle": "rainbow",
-    "fade_speed": 2,
+    "fade_speed": 4,
     "volume_sensitivity": 50,
     "keep_topmost": false,
     "high_res_audio": false,
@@ -21,7 +22,7 @@
         "bins": 120
     },
     "blackhole": {
-        "disk_particles": 5000,
+        "disk_particles": 4000,
         "inner_disk_radius": 130,
         "outer_disk_radius": 600
     },
