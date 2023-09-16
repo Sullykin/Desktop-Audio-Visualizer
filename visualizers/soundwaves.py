@@ -1,5 +1,6 @@
 import pygame
 from random import randint
+import numpy as np
 
 class Soundwaves:
     def __init__(self, visualizer):
@@ -7,12 +8,15 @@ class Soundwaves:
         self.visualizer = visualizer
         self.position = "center"
 
+    def update_settings(self):
+        pass
+
     def update(self, audio_features):
-        volume = audio_features["volume"]
+        volume = np.max(audio_features["amps"]) ** 1.3
         pitch = audio_features["pitch"]
         color = self.visualizer.color
         if pitch < 500:  # good limit for voices and bass
-            color = [pitch//2 if i == 0 else x for i, x in enumerate(color)]
+            color = [pitch // 2 if i == 0 else x for i, x in enumerate(color)]
         for soundwave in self.soundwaves:
             soundwave.update()
             if soundwave.done:

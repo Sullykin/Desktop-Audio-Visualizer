@@ -4,19 +4,25 @@ import pygame.gfxdraw
 import numpy as np
 import random
 
-# emite soundwaves through the disk, brightening the color via pitch or amp; requires using distance from center formula
+# emit soundwaves through the disk, brightening the color via pitch or amp; requires using distance from center formula
 
 class BlackHole:
     def __init__(self, visualizer):
-        self.jets = Jet(visualizer)
-        self.accretion_disk = AccretionDisk(visualizer)
-        self.accretion_disk.jets = self.jets
         self.visualizer = visualizer
+        self.update_settings()
+        self.jets = Jet(visualizer)
+        self.accretion_disk = AccretionDisk(visualizer, self.num_disk_particles, self.inner_disk_radius, self.outer_disk_radius)
+        self.accretion_disk.jets = self.jets
         self.radius = 100
         self.center = (visualizer.SCREEN_WIDTH//2,visualizer.SCREEN_HEIGHT//2)
 
+    def update_settings(self):
+        self.num_disk_particles = self.visualizer.settings["blackhole"]["disk_particles"]
+        self.inner_disk_radius = self.visualizer.settings["blackhole"]["inner_disk_radius"]
+        self.outer_disk_radius = self.visualizer.settings["blackhole"]["outer_disk_radius"]
+
     def update(self, audio_features):
-        volume = audio_features["volume"]
+        volume = np.max(audio_features["amps"]) ** 1.3
         if self.accretion_disk.disk_speed >= 0.1:
             self.jets.active = True
         elif self.accretion_disk.disk_speed < 0.09:
@@ -33,16 +39,14 @@ class BlackHole:
 
 
 class AccretionDisk:
-    def __init__(self, visualizer):
+    def __init__(self, visualizer, num_particles, inner_radius, outer_radius):
         self.visualizer = visualizer
         self.screen_w = visualizer.SCREEN_WIDTH
         self.screen_h = visualizer.SCREEN_HEIGHT
         self.center = (self.screen_w//2,self.screen_h//2,0)
-        self.inner_radius = 150
-        self.outer_radius = 500
         self.color = self.visualizer.color
         self.setup_transformation_vars()
-        disk_positions = generate_disk_points(4000, self.inner_radius, self.outer_radius, self.center)
+        disk_positions = generate_disk_points(num_particles, inner_radius, outer_radius, self.center)
         self.particle_system = ParticleSystem(visualizer, disk_positions)
         # self.rotate_from_start_pos(self, target_vector=np.array([0.1,0.9,0]))
 
@@ -128,7 +132,7 @@ class ParticleSystem:
         self.positions = self.remove_offscreen_particles(self.positions, self.screen_w, self.screen_h)
 
     def draw(self, color): # 900, 500, 200
-        radius_squared = 100 ** 2   
+        radius_squared = 100 ** 2
         for position in self.positions:
             int_position = [int(x) for x in position]
             point2d = (int_position[0], position[1])
@@ -139,22 +143,25 @@ class ParticleSystem:
                 pygame.draw.circle(self.visualizer.screen, color, point2d, 1)
 
     def rotate_points_around_axis(self, angle, axis, center, disk_normal):
-        points = self.positions
         center = np.array(center)
         axis = np.array(axis)
         u = axis / np.linalg.norm(axis)
         cos_a = np.cos(angle)
         sin_a = np.sin(angle)
+
         rotation_matrix = np.array([
             [cos_a + u[0]**2*(1-cos_a), u[0]*u[1]*(1-cos_a) - u[2]*sin_a, u[0]*u[2]*(1-cos_a) + u[1]*sin_a],
             [u[1]*u[0]*(1-cos_a) + u[2]*sin_a, cos_a + u[1]**2*(1-cos_a), u[1]*u[2]*(1-cos_a) - u[0]*sin_a],
             [u[2]*u[0]*(1-cos_a) - u[1]*sin_a, u[2]*u[1]*(1-cos_a) + u[0]*sin_a, cos_a + u[2]**2*(1-cos_a)]
         ])
-        points_centered = points - center
+
+        points_centered = self.positions - center
         rotated_points = np.dot(rotation_matrix, points_centered.T).T
-        disk_normal = np.dot(rotation_matrix, disk_normal)
         rotated_points += center
         self.positions = rotated_points
+
+        disk_normal = np.dot(rotation_matrix, disk_normal)
+
         return disk_normal
 
     def translate_points_to_center(self, points, indices):
@@ -176,7 +183,7 @@ class ParticleSystem:
             positions[:, 1] >= 0,
             positions[:, 1] <= screen_height,
         ))
-        
+
         # Remove particles that are off screen
         positions = positions[on_screen_mask]
         return positions
