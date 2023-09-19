@@ -186,7 +186,7 @@ class Visualizer:
         #normalized_volume = self.normalize_volume(rms_volume)
         windowed_data = samples * self.hann_window(self.CHUNK)
         fft = np.fft.fft(windowed_data)
-        amps = np.abs(fft)
+        amps = np.abs(fft) #/ 6
         return {
                 "fft": fft,
                 "amps": amps,

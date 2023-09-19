@@ -116,7 +116,7 @@ class Config:
                     #print(f"Configuration loaded: {self.settings}")
                 except json.JSONDecodeError as e:
                     self.settings = self.default_settings
-                    windll.user32.MessageBoxW(0, f"Config validation failed (continuing with default settings). Reason: {e}", u"Error", 0)
+                    #windll.user32.MessageBoxW(0, f"Config validation failed (continuing with default settings). Reason: {e}", u"Error", 0)
                     #print(f"Failed to load configuration: {e}")
         except FileNotFoundError as e:
             windll.user32.MessageBoxW(0, f"Config file not found. {e}", u"Error", 0)

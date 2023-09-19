@@ -215,7 +215,7 @@ class ParticleField:
 
         # Update velocities based on forces
         internal_forces = self.process_internal_forces()
-        external_forces = self.process_external_forces(magnitude, audio_features["fft"], amplitude_data)
+        external_forces = self.process_external_forces(magnitude, audio_features["fft"])
         total_forces = internal_forces + external_forces
         self.particles[:,:,3:6] += total_forces
 
@@ -257,7 +257,7 @@ class ParticleField:
 
         return internal_forces
 
-    def process_external_forces(self, magnitude, fft_data, amplitude_data):
+    def process_external_forces(self, magnitude, fft_data):
         if magnitude >= self.wave_threshold  and np.random.random() < 0.3:
             if self.edge_waves:
                 wave_direction = np.random.choice(['up', 'down', 'left', 'right'])
@@ -271,7 +271,7 @@ class ParticleField:
             self.distortion_factor -= 0.5
 
         self.update_edge_wavefronts()
-        radial_forces = self.update_radial_wavefronts(fft_data, amplitude_data)
+        radial_forces = self.update_radial_wavefronts(fft_data, magnitude)
 
         #return np.zeros((self.grid_w, self.grid_h, 3))
         return radial_forces + self.edge_force
@@ -322,7 +322,7 @@ class ParticleField:
                         'speed': 10+mg*2, 'max_radius': 1200}
         self.persistent_radial_wavefronts.append(new_wavefront) 
 
-    def update_radial_wavefronts(self, fft_data, amplitude_data):
+    def update_radial_wavefronts(self, fft_data, magnitude):
         force_vectors = np.zeros((self.grid_w, self.grid_h, 3), dtype=float)
 
         # Generate new wavefronts based on the current force centers
@@ -330,7 +330,7 @@ class ParticleField:
             self.frame_counter += 1  # Increment the frame counter
             
             if self.frame_counter >= self.sampling_rate:  # Check if it's time to generate a new wavefront
-                self.generate_radial_wavefront(self.force_center[0], self.force_center[1], np.max(amplitude_data))
+                self.generate_radial_wavefront(self.force_center[0], self.force_center[1], magnitude)
                 self.frame_counter = 0  # Reset the counter
 
         new_persistent_wavefronts = []

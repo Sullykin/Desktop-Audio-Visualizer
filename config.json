@@ -1,10 +1,10 @@
 {
-    "active_visualizer": "freq_spikes",
+    "active_visualizer": "particle_field",
     "color_scheme": "fade",
     "static_color": [120, 6, 225],
     "fade_cycle": "rainbow",
     "fade_speed": 5,
-    "volume_sensitivity": 50,
+    "volume_sensitivity": 20,
     "keep_topmost": false,
     "freq_spikes": {
         "mirror_x": false,
