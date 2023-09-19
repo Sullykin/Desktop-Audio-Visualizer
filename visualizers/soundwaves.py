@@ -13,10 +13,8 @@ class Soundwaves:
 
     def update(self, audio_features):
         volume = np.max(audio_features["amps"]) ** 1.3
-        pitch = audio_features["pitch"]
         color = self.visualizer.color
-        if pitch < 500:  # good limit for voices and bass
-            color = [pitch // 2 if i == 0 else x for i, x in enumerate(color)]
+        color = [max(x - int(volume * 2.5), 0) for x in color]
         for soundwave in self.soundwaves:
             soundwave.update()
             if soundwave.done:
@@ -37,14 +35,15 @@ class Soundwave:
         self.visualizer = visualizer
         self.x = x
         self.y = y
-        self.maxRadius = volume * self.visualizer.settings["volume_sensitivity"] // 2
+        self.speed = volume
+        self.maxRadius = volume * self.visualizer.settings["volume_sensitivity"]
         self.radius = 0
         self.done = False
         self.color = color
         
     def update(self):
         # movement
-        self.radius += 5
+        self.radius += self.speed
         if self.radius >= self.maxRadius:
             self.done = True
 

@@ -13,9 +13,9 @@ from queue import Queue
 
 import visualizers.soundwaves as soundwaves
 import visualizers.freq_spikes as freq_spikes
-import visualizers.pitch_spikes as pitch_spikes
 import visualizers.blackhole as blackhole
 import visualizers.particle_field as particle_field
+#import visualizers.pitch_spikes as pitch_spikes
 #import visualizers.spirograph as spirograph
 #import visualizers.perlinfield as perlinfield
 from color_manager import ColorFade
@@ -38,6 +38,9 @@ class Visualizer:
     def __init__(self):
         self.color = (0,0,0)
         self.audio_queue = Queue()
+        monitor = get_monitors()[0]
+        self.SCREEN_WIDTH = monitor.width
+        self.SCREEN_HEIGHT = monitor.height
         self.config = Config(self)
         self.setup_display()
         self.average_volume = None
@@ -46,21 +49,18 @@ class Visualizer:
 
     def set_visualizer(self):
         self.valid_visualizers = {
-            "pitch_spikes": pitch_spikes.PitchSpikes(self),
             "blackhole": blackhole.BlackHole(self),
             "soundwaves": soundwaves.Soundwaves(self),
-            #"perlinfield": perlinfield.PerlinField(self),
-            #"spirograph": spirograph.Spirograph(self),
             "freq_spikes": freq_spikes.FreqSpikes(self),
             "particle_field": particle_field.ParticleField(self)
+            #"pitch_spikes": pitch_spikes.PitchSpikes(self),
+            #"perlinfield": perlinfield.PerlinField(self),
+            #"spirograph": spirograph.Spirograph(self)
         }
         selected_visualizer = self.settings["active_visualizer"]
         self.active_visualizer = self.valid_visualizers[selected_visualizer]
 
     def setup_display(self):
-        monitor = get_monitors()[0]
-        self.SCREEN_WIDTH = monitor.width
-        self.SCREEN_HEIGHT = monitor.height
         pygame.init()
         os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0, 0)
         self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT),pygame.NOFRAME)
@@ -94,10 +94,7 @@ class Visualizer:
 
     def setup_audio(self):
         self.RATE = 48000
-        if self.settings["high_res_audio"]:
-            self.CHUNK = 4096
-        else:
-            self.CHUNK = 2048
+        self.CHUNK = 2048
         self.FORMAT = pyaudio.paFloat32
         self.CHANNELS = 1
         self.setup_pitch_detection()
@@ -176,9 +173,12 @@ class Visualizer:
             self.send_frame()
 
     def read_audio(self):
-        while not self.done:
-            frame = self.stream.read(self.CHUNK)
-            self.audio_queue.put(frame)
+        try:
+            while not self.done:
+                frame = self.stream.read(self.CHUNK)
+                self.audio_queue.put(frame)
+        except Exception as e:
+            self.done = True
 
     def process_audio(self, samples):
         pitch = self.pDetection(samples)[0]

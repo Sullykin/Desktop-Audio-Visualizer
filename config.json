@@ -1,34 +1,26 @@
 {
     "active_visualizer": "freq_spikes",
-    "color_scheme": "static",
-    "static_color": [100, 30, 225],
+    "color_scheme": "fade",
+    "static_color": [120, 6, 225],
     "fade_cycle": "rainbow",
-    "fade_speed": 4,
+    "fade_speed": 5,
     "volume_sensitivity": 50,
     "keep_topmost": false,
-    "high_res_audio": false,
     "freq_spikes": {
         "mirror_x": false,
-        "mirror_y": true,
+        "mirror_y": false,
         "invert_x_mirror": false,
-        "invert_y_mirror": true,
-        "bins": 120
-    },
-    "pitch_spikes": {
-        "mirror_x": true,
-        "mirror_y": true,
-        "invert_x_mirror": false,
-        "invert_y_mirror": true,
+        "invert_y_mirror": false,
         "bins": 120
     },
     "blackhole": {
-        "disk_particles": 4000,
+        "disk_particles": 3000,
         "inner_disk_radius": 130,
-        "outer_disk_radius": 600
+        "outer_disk_radius": 700
     },
     "particle_field": {
         "grid_size": 2,
-        "zoom_factor": 1,
+        "zoom_factor": 4,
         "edge_waves": true,
         "radial_waves": true
     }

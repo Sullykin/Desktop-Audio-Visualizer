@@ -5,6 +5,9 @@ import colorsys
 
 # add frequency bar at bottom or sides to generate waves completely based on music
 
+PAN_SPEED = 20
+ZOOM_FACTOR = 1.1
+
 class Camera:
     def __init__(self, particle_field, x=0, y=0, zoom=1, angle=0):
         self.particle_field = particle_field
@@ -32,6 +35,7 @@ class Camera:
         return transformed_particles.T.reshape(self.particle_field.grid_w, self.particle_field.grid_h, 3)
 
     def update(self):
+        '''
         cos_a = math.cos(math.radians(self.angle))
         sin_a = math.sin(math.radians(self.angle))
 
@@ -55,17 +59,18 @@ class Camera:
             [0, 1, self.screen_h // 2],
             [0, 0, 1]
         ])
+        '''
 
         # Transformation matrix for panning and zooming
-        transformation_matrix = np.array([
+        self.transformation_matrix = np.array([
             [self.zoom, 0, self.x],
             [0, self.zoom, self.y],
             [0, 0, 1]
         ])
 
         # The final transformation matrix
-        self.transformation_matrix = np.dot(translate_back, np.dot(rotation_matrix, translate_to_origin))
-        self.transformation_matrix = np.dot(transformation_matrix, self.transformation_matrix)
+        #self.transformation_matrix = np.dot(translate_back, np.dot(rotation_matrix, translate_to_origin))
+        #self.transformation_matrix = np.dot(transformation_matrix, self.transformation_matrix)
 
     def rotate(self, delta_angle):
         self.angle += delta_angle
@@ -134,7 +139,7 @@ class ParticleField:
         self.original_positions = np.copy(self.particles)
 
     def precompute_velocity_colors(self):
-        max_velocity = 100  # This is the maximum expected velocity
+        max_velocity = 80  # This is the maximum expected velocity
         self.color_angle = 0
         self.color_map = {}
         for v in range(max_velocity + 1):
@@ -165,6 +170,8 @@ class ParticleField:
         # Radial waves
         self.force_center = (self.screen_w // 2, self.screen_h // 2)
         self.persistent_radial_wavefronts = []
+        self.frame_counter = 0
+        self.sampling_rate = 10  # Generate a new wavefront every 10 frames
 
         # distortion
         self.distortion_factor = 0
@@ -177,41 +184,38 @@ class ParticleField:
         self.radial_waves = self.visualizer.settings["particle_field"]["radial_waves"]
 
     def check_user_input(self):
-        pan_speed = 20
-        zoom_factor = 1.1
         pressed_keys = pygame.key.get_pressed()
 
         # Pan
         if pressed_keys[pygame.K_LEFT]:
-            self.camera.pan_left(pan_speed)
+            self.camera.pan_left(PAN_SPEED)
         elif pressed_keys[pygame.K_UP]:
-            self.camera.pan_up(pan_speed)
+            self.camera.pan_up(PAN_SPEED)
         if pressed_keys[pygame.K_RIGHT]:
-            self.camera.pan_right(pan_speed)
+            self.camera.pan_right(PAN_SPEED)
         elif pressed_keys[pygame.K_DOWN]:
-            self.camera.pan_down(pan_speed)
+            self.camera.pan_down(PAN_SPEED)
 
         # Zoom
         if pressed_keys[pygame.K_z]:
-            self.camera.zoom_in(zoom_factor)
+            self.camera.zoom_in(ZOOM_FACTOR)
         elif pressed_keys[pygame.K_x]:
-            self.camera.zoom_out(zoom_factor)
+            self.camera.zoom_out(ZOOM_FACTOR)
 
         # Rotate
-        if pressed_keys[pygame.K_a]:
-            self.camera.rotate(-5)
-        elif pressed_keys[pygame.K_d]:
-            self.camera.rotate(5)
+        #if pressed_keys[pygame.K_a]:
+        #    self.camera.rotate(-5)
+        #elif pressed_keys[pygame.K_d]:
+        #    self.camera.rotate(5)
 
     def update(self, audio_features):
         self.check_user_input()
-        fft_data = audio_features["fft"]
         amplitude_data = audio_features["amps"]
         magnitude = np.max(amplitude_data)
 
         # Update velocities based on forces
         internal_forces = self.process_internal_forces()
-        external_forces = self.process_external_forces(magnitude, fft_data, amplitude_data)
+        external_forces = self.process_external_forces(magnitude, audio_features["fft"], amplitude_data)
         total_forces = internal_forces + external_forces
         self.particles[:,:,3:6] += total_forces
 
@@ -314,18 +318,20 @@ class ParticleField:
     def generate_radial_wavefront(self, center_x, center_y, magnitude):
         mg = np.real(magnitude)
         new_wavefront = {'center_x': center_x, 'center_y': center_y,
-                        'radius': 0, 'magnitude': mg,
-                        'speed': 20+mg*2, 'max_radius': 1200}
+                        'radius': 0, 'magnitude': mg*2,
+                        'speed': 10+mg*2, 'max_radius': 1200}
         self.persistent_radial_wavefronts.append(new_wavefront) 
 
     def update_radial_wavefronts(self, fft_data, amplitude_data):
         force_vectors = np.zeros((self.grid_w, self.grid_h, 3), dtype=float)
-        
-        # Generate new wavefronts based on current force centers
+
+        # Generate new wavefronts based on the current force centers
         if self.radial_waves:
-            force_centers = self.identify_force_centers(fft_data, amplitude_data)
-            for center_x, center_y, magnitude in force_centers:
-                self.generate_radial_wavefront(center_x, center_y, magnitude) 
+            self.frame_counter += 1  # Increment the frame counter
+            
+            if self.frame_counter >= self.sampling_rate:  # Check if it's time to generate a new wavefront
+                self.generate_radial_wavefront(self.force_center[0], self.force_center[1], np.max(amplitude_data))
+                self.frame_counter = 0  # Reset the counter
 
         new_persistent_wavefronts = []
         for wavefront in self.persistent_radial_wavefronts:
@@ -342,15 +348,22 @@ class ParticleField:
             distance = np.sqrt(dx ** 2 + dy ** 2)
 
             # Gaussian profile for the force
-            gaussian_width = 30.0  # This width can be adjusted
+            gaussian_width = 30.0
             gaussian_profile = np.exp(-((distance - radius)**2) / (2*gaussian_width**2))
 
             # Apply radial force only to particles close to the current wavefront radius
             radial_force = wavefront['magnitude']
 
-            force_vectors[:,:,0] += gaussian_profile * radial_force * np.cos(np.arctan2(dy, dx))
-            force_vectors[:,:,1] += gaussian_profile * radial_force * np.sin(np.arctan2(dy, dx))
-            
+            angles = np.arctan2(dy, dx)
+            cos_angles = np.cos(angles)
+            sin_angles = np.sin(angles)
+
+            force_update_x = gaussian_profile * radial_force * cos_angles
+            force_update_y = gaussian_profile * radial_force * sin_angles
+
+            np.add(force_vectors[:, :, 0], force_update_x, out=force_vectors[:, :, 0])
+            np.add(force_vectors[:, :, 1], force_update_y, out=force_vectors[:, :, 1])
+
             # Update radius for next frame
             wavefront['radius'] += wavefront['speed']
             
@@ -361,20 +374,9 @@ class ParticleField:
         self.persistent_radial_wavefronts = new_persistent_wavefronts
 
         # Dampen the radial forces a bit
-        force_vectors *= 0.3
+        np.multiply(force_vectors, 0.3, out=force_vectors)
 
         return force_vectors
-
-    def identify_force_centers(self, fft_data, amplitude_data, random=False):
-        if random:
-            x = np.random.randint(0, self.screen_w)
-            y = np.random.randint(0, self.screen_h)
-            self.force_center = (x, y)
-
-        # Use the amplitude to set the magnitude of the radial force
-        magnitude = np.max(amplitude_data)
-
-        return [(self.force_center[0], self.force_center[1], magnitude)]
 
     def draw(self):
         for i in range(self.grid_w):

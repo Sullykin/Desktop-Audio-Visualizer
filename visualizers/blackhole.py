@@ -5,6 +5,8 @@ import numpy as np
 import random
 
 # emit soundwaves through the disk, brightening the color via pitch or amp; requires using distance from center formula
+# change jet particles to stay on their original path
+# optimize jets
 
 class BlackHole:
     def __init__(self, visualizer):
@@ -75,7 +77,7 @@ class AccretionDisk:
             self.disk_speed -= 0.0002
         self.disk_normal = self.particle_system.rotate_points_around_axis(self.rotation_speed, self.rotation_axis, self.center, self.disk_normal)
         disk_normal = self.particle_system.rotate_points_around_axis(self.disk_speed, self.disk_normal, self.center, self.disk_normal)
-        self.randomize_rotation_axis()
+        #self.randomize_rotation_axis()
         #self.check_target_axis()
 
     def randomize_rotation_axis(self):
@@ -132,7 +134,7 @@ class ParticleSystem:
         self.positions = self.remove_offscreen_particles(self.positions, self.screen_w, self.screen_h)
 
     def draw(self, color): # 900, 500, 200
-        radius_squared = 100 ** 2
+        radius_squared = 10000
         for position in self.positions:
             int_position = [int(x) for x in position]
             point2d = (int_position[0], position[1])

@@ -7,25 +7,14 @@ import time
 import os
 
 SETTING_SCHEMA = {
-    "active_visualizer": {"type": str, "valid_values": ["pitch_spikes", "blackhole", "soundwaves", "freq_spikes", "particle_field"]},
+    "active_visualizer": {"type": str, "valid_values": ["blackhole", "soundwaves", "freq_spikes", "particle_field"]},
     "color_scheme": {"type": str, "valid_values": ["fade", "static"]},
     "static_color": {"type": list, "length": 3, "tuple_range": [(0, 255), (0, 255), (0, 255)]},
     "fade_cycle": {"type": str, "valid_values": ["rainbow", "rgb", "warm", "cool"]},
     "fade_speed": {"type": int, "range": (1, 50)},
     "volume_sensitivity": {"type": int, "range": (0, 100)},
     "keep_topmost": {"type": bool},
-    "high_res_audio": {"type": bool},
     "freq_spikes": {
-        "type": dict,
-        "sub_keys": {
-            "mirror_x": {"type": bool},
-            "mirror_y": {"type": bool},
-            "invert_x_mirror": {"type": bool},
-            "invert_y_mirror": {"type": bool},
-            "bins": {"type": int, "range": (10, 400)}
-        }
-    },
-    "pitch_spikes": {
         "type": dict,
         "sub_keys": {
             "mirror_x": {"type": bool},
@@ -76,34 +65,26 @@ class Config:
         self.default_settings = {
             "active_visualizer": "freq_spikes",
             "color_scheme": "fade",
-            "static_color": [50, 6, 225],
+            "static_color": [120, 6, 225],
             "fade_cycle": "rainbow",
             "fade_speed": 3,
             "volume_sensitivity": 50,
             "keep_topmost": False,
-            "high_res_audio": False,
             "freq_spikes": {
                 "mirror_x": False,
-                "mirror_y": True,
-                "invert_x_mirror": False,
-                "invert_y_mirror": True,
-                "bins": 120
-            },
-            "pitch_spikes": {
-                "mirror_x": True,
                 "mirror_y": False,
                 "invert_x_mirror": False,
-                "invert_y_mirror": True,
+                "invert_y_mirror": False,
                 "bins": 120
             },
             "blackhole": {
-                "disk_particles": 4000,
+                "disk_particles": 3000,
                 "inner_disk_radius": 130,
                 "outer_disk_radius": 700
             },
             "particle_field": {
                 "grid_size": 2,
-                "zoom_factor": 3,
+                "zoom_factor": 4,
                 "edge_waves": True,
                 "radial_waves": True
             }
@@ -135,6 +116,7 @@ class Config:
                     #print(f"Configuration loaded: {self.settings}")
                 except json.JSONDecodeError as e:
                     self.settings = self.default_settings
+                    windll.user32.MessageBoxW(0, f"Config validation failed (continuing with default settings). Reason: {e}", u"Error", 0)
                     #print(f"Failed to load configuration: {e}")
         except FileNotFoundError as e:
             windll.user32.MessageBoxW(0, f"Config file not found. {e}", u"Error", 0)
@@ -143,7 +125,7 @@ class Config:
         if errors:
             self.event_handler.error_flag = True
             self.settings = self.default_settings
-            windll.user32.MessageBoxW(0, f"Config validation failed. Reason: {errors[0]}", u"Error", 0)
+            windll.user32.MessageBoxW(0, f"Config validation failed (continuing with default settings). Reason: {errors[0]}", u"Error", 0)
 
         self.visualizer.settings = self.settings
         if not startup:
@@ -169,6 +151,7 @@ class Config:
             # Check if the type matches
             if not isinstance(value, expected_type):
                 errors.append(f"Invalid type for '{full_key}'. Expected {expected_type}, got {type(value)}")
+                return errors
 
             # Check against a list of valid values
             if "valid_values" in rule and value not in rule["valid_values"]:

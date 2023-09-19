@@ -41,20 +41,43 @@ class FreqSpikes:
         n = len(raw_amplitudes)
         freqs_linear = np.fft.fftfreq(n)[:n//2]
         
-        # Create more bins for lower frequencies
-        more_bins_for_low_freqs = np.logspace(np.log10(freqs_linear[1]), np.log10(freqs_linear[-1]), int(self.n_bins * self.LOG_BIN_SCALING_FACTOR))
-        log_freqs = more_bins_for_low_freqs[:self.n_bins]  # take only the lower half of bins
+        cutoff_frequency = 220
+        normalized_cutoff = cutoff_frequency / self.visualizer.RATE
+        cutoff_index = np.argmin(np.abs(freqs_linear - normalized_cutoff))
+        
+        lower_freqs = freqs_linear[:cutoff_index]
+        upper_freqs = freqs_linear[cutoff_index:]
 
-        # Interpolate to log scale
+        # Apply linear scaling to frequencies below the cutoff
+        scaled_lower_freqs = lower_freqs ** 1.3
+
+        # Make sure the two parts add up to n_bins
+        n_lower_bins = cutoff_index
+        n_upper_bins = self.n_bins - n_lower_bins
+
+        # Apply custom exponent to upper frequencies
+        scaled_upper_freqs = upper_freqs ** 1.5
+
+        # Make sure there's no gap between the scales
+        first_log_freq = scaled_lower_freqs[-1]
+
+        # Adjust the scaled_upper_freqs to avoid gap
+        scaled_upper_freqs = scaled_upper_freqs * (first_log_freq / scaled_upper_freqs[0])
+
+        # Combine the two scales
+        blended_freqs = np.concatenate([scaled_lower_freqs, scaled_upper_freqs])
+
+        # Interpolate to the blended scale
         interpolate_func = interp1d(freqs_linear, raw_amplitudes[:n//2], kind='linear', fill_value='extrapolate')
-        return log_freqs, interpolate_func(log_freqs)
+        return blended_freqs, interpolate_func(blended_freqs)
 
     def calculate_heights(self, log_freqs, log_amplitudes):
         boost_factor = np.exp(-log_freqs / max(log_freqs))
-        dampen_factor = 1 - np.exp(-log_freqs / (max(log_freqs) / 30))
-        adjusted_amplitudes = log_amplitudes * boost_factor * dampen_factor
-        amplitudes = np.multiply(adjusted_amplitudes ** 1.25, 10)
+        dampen_factor = 1 - np.exp(-log_freqs / (max(log_freqs) / 200))
+        adjusted_amplitudes = np.abs(log_amplitudes * boost_factor * dampen_factor)
+        amplitudes = np.multiply(adjusted_amplitudes, 5) ** 1.3
         target_heights = np.minimum(amplitudes * self.sensitivity, self.MAX_TARGET_HEIGHT * 5) / 5
+        target_heights = target_heights[:self.n_bins]
         self.heights = self.DECAY_FACTOR * self.heights + (1 - self.DECAY_FACTOR) * target_heights
 
     def update(self, audio_features):
